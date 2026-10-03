@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  firstName    String   @db.VarChar(100)
+  lastName     String   @db.VarChar(100)
+  email        String   @unique @db.VarChar(191)
+  pendingEmail String?  @unique @db.VarChar(191)
+  verifiedAt   DateTime?
+  phone        String   @db.VarChar(30)
+  passwordHash String   @db.VarChar(255)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  categories   Category[]
+  wines        Wine[]
+  movements    StockMovement[]
+  transfers    DataTransfer[]
+  sessions     Session[]
+  emailVerification EmailVerificationToken?
+  passwordResets PasswordResetToken[]
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tokenHash String   @unique @db.VarChar(64)
+  email     String   @db.VarChar(191)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique @db.VarChar(64)
+  email     String   @db.VarChar(191)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Session {
+  id        String   @id @db.VarChar(36)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum TransferKind {
+  IMPORT
+  EXPORT
+}
+
+model DataTransfer {
+  id        String       @id @default(cuid())
+  userId    String
+  kind      TransferKind
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, kind, createdAt])
+}
+
+model Category {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String   @db.VarChar(100)
+  normalizedName String   @db.VarChar(100)
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wines          Wine[]
+  @@unique([userId, normalizedName])
+  @@index([userId, position])
+}
+
+model Wine {
+  id            String    @id @default(cuid())
+  userId        String
+  categoryId    String
+  identityKey   String    @db.VarChar(64)
+  region        String    @db.VarChar(150)
+  appellation   String    @db.VarChar(150)
+  domaine       String    @db.VarChar(150)
+  vintage       Int
+  quantity      Int       @default(0)
+  cuvee         String?   @db.VarChar(150)
+  purchasePrice Decimal?  @db.Decimal(10, 2)
+  comment       String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  movements     StockMovement[]
+  @@unique([userId, categoryId, identityKey])
+  @@index([userId, categoryId])
+}
+
+enum MovementKind {
+  ENTRY
+  EXIT
+}
+
+model StockMovement {
+  id           String       @id @default(cuid())
+  userId       String
+  wineId       String
+  kind         MovementKind
+  quantity     Int
+  movementDate DateTime?     @db.Date
+  createdAt    DateTime      @default(now())
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wine         Wine         @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([userId, movementDate])
+  @@index([wineId, createdAt])
+}
+
+model CaptchaChallenge {
+  id         String   @id @default(cuid())
+  answerHash String   @db.VarChar(64)
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model RequestRateLimit {
+  key       String   @id @db.VarChar(191)
+  count     Int      @default(0)
+  expiresAt DateTime
+  @@index([expiresAt])
+}

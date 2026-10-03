@@ -1,0 +1,71 @@
+# CaveStock
+
+Vitrine publique, connexion et espace personnel de gestion de cave.
+
+## Démarrage local
+
+1. Utiliser Node.js 24 et installer les dépendances avec `npm ci`.
+2. Démarrer PostgreSQL local avec `npm run db:local` (Prisma Postgres local, sans Docker), ou utiliser une base PostgreSQL dédiée.
+3. Copier `.env.example` en `.env` et remplir `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET` et les variables Brevo ci-dessous. Adapter le port à celui affiché par Prisma si nécessaire. Ne jamais publier ce fichier.
+4. Appliquer les migrations avec `npm run db:deploy`.
+5. Démarrer avec `npm run dev -- --port 3100`, puis ouvrir `http://localhost:3100`.
+
+`AUTH_SECRET` doit contenir au moins 32 caractères aléatoires.
+
+Les sessions sont conservées en base et révoquées lors de la déconnexion. La migration des sessions déconnecte les comptes déjà connectés une seule fois. En production, placer l'application derrière HTTPS. Pour une limite par adresse IP, définir `TRUSTED_CLIENT_IP_HEADER` uniquement si le proxy efface l'en-tête envoyé par le visiteur puis le réécrit avec l'adresse observée ; sinon, la limite globale reste active.
+
+## Inscription
+
+Le CAPTCHA est généré par le site. Son défi temporaire expire après 5 minutes et n'enregistre aucune donnée de compte. Après validation, le mot de passe est haché et un compte en attente est créé. Un lien de validation valable 24 heures est envoyé par Brevo. Tant que l'adresse n'est pas validée, la connexion et les sessions sont refusées. Le lien peut être renvoyé depuis la connexion avec le mot de passe du compte. Les comptes existants avant cette migration conservent leur accès.
+
+### Configuration Brevo
+
+Dans `.env` en local, puis dans les variables d'environnement Vercel au déploiement, définir `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `CAVESTOCK_CONTACT_EMAIL` et `CAVESTOCK_SITE_URL`. La clé reste côté serveur : ne pas utiliser le préfixe `NEXT_PUBLIC_`. `CAVESTOCK_SITE_URL` doit être l'URL publique exacte en HTTPS en production ; elle détermine le domaine du lien de validation. Redémarrer le serveur après modification de `.env`.
+
+Sans domaine personnel, créer une adresse réelle distincte pour CaveStock (par exemple chez Gmail), puis l'ajouter et la vérifier dans Brevo sous Paramètres > Expéditeurs, domaines et IP > Expéditeurs. Mettre cette adresse d'origine dans `BREVO_SENDER_EMAIL`, pas l'adresse `...brevosend.com` vue par les destinataires : Brevo génère cette dernière automatiquement lorsque le domaine n'est pas authentifié. Le nom visible envoyé par l'application reste « CaveStock ». Le compte Brevo peut être commun avec la pâtisserie, mais les deux projets utilisent des adresses d'origine distinctes. Quand CaveStock aura son propre domaine, authentifier ce domaine dans Brevo et remplacer l'expéditeur configuré. Pour recevoir les messages du formulaire, configurer `CAVESTOCK_CONTACT_EMAIL` ; si c'est un Google Group, autoriser la réception depuis l'extérieur.
+
+La connexion et l'inscription partagent la page `/connexion` ; le mode inscription est accessible par `/connexion?mode=inscription`. L'ancienne URL `/inscription` redirige vers ce mode.
+
+### Mot de passe oublié
+
+Le lien « Mot de passe oublié ? » ouvre le formulaire d'envoi sur la page de connexion. La réponse reste identique pour une adresse connue ou inconnue. Brevo reçoit la demande après la réponse HTTP via `after` de Next.js. Le lien expire après 30 minutes ; seul son hachage est conservé en base. Le jeton est dans le fragment du lien et retiré de l'adresse du navigateur après lecture.
+
+Le changement révoque toutes les sessions et tous les liens de récupération du compte. Il annule aussi un changement d'adresse en attente. Un compte non encore validé devient validé, puisque le lien prouve la possession de l'adresse. Aucun utilisateur n'est connecté automatiquement après le changement.
+
+`npm run test:password -- --regression` démarre un serveur de test sur 3101 et capture les mails localement, sans en envoyer à Brevo. Arrêter le serveur de développement avant ce test. Le test couvre notamment l'expiration, l'usage unique, la concurrence, la révocation, les pannes d'envoi et les autres parcours de la cave.
+
+## Espace cave
+
+Chaque compte possède ses propres catégories et vins. Les catégories initiales sont Vins Blanc, Vins Rouge, Vins Rosé et Champagnes ; l'utilisateur peut en ajouter. Recherche et tri sont appliqués dans les catégories. Les formulaires permettent d'ajouter un vin, de modifier ses informations ou sa catégorie, de changer sa quantité et de consulter son historique.
+
+Chaque création et augmentation de quantité produit une entrée ; chaque diminution produit une sortie. Une quantité de zéro conserve la fiche et son historique. Une suppression confirmée efface la fiche et ses mouvements. Les statistiques d'entrées et sorties couvrent l'année civile en heure de Paris, du 1er janvier au 31 décembre. La bouteille la plus ancienne concerne le stock actuellement positif.
+
+Un ajout correspondant au même vin est fusionné avec sa fiche et compté comme une entrée. L'identité repose sur catégorie, région, appellation, domaine et millésime. La cuvée distingue des vins seulement si elle est renseignée ; si plusieurs cuvées correspondent à une saisie sans cuvée, le site demande de préciser plutôt que de fusionner arbitrairement.
+
+Le menu propose l'import, l'export, l'historique global, le profil, le contact et la déconnexion. L'historique global est sur `/espace/historique` ; il reprend le menu et la recherche et regroupe les mouvements par jour. Le contact ouvre un formulaire prérempli avec les coordonnées du compte, non modifiables dans cette fenêtre. Le message est envoyé par Brevo à `CAVESTOCK_CONTACT_EMAIL`, avec l'adresse de l'utilisateur en « Répondre à ».
+
+L'import accepte `.xls` (Excel BIFF), `.xlsx`, `.csv` et `.tsv` (2 Mo, 500 vins, 15 onglets, 2 000 lignes et 64 colonnes par onglet maximum). Il reconnaît les intitulés usuels, les tableaux horizontaux ou verticaux décalés, les titres précédant le tableau, les blocs à en-têtes répétés et les sections de région. Les CSV UTF-8, UTF-16 et Windows-1252 sont acceptés. Les colonnes inconnues peuvent être réaffectées ; leurs valeurs sont sinon conservées dans les commentaires. Les onglets sans tableau identifiable et les onglets d'historique/archives sont ignorés et signalés. Les formules ne sont pas exécutées : seul leur résultat enregistré est lu.
+
+Pour les tableaux avec des repères décroissants (par exemple 24 à 0), le compteur numérique adjacent, comme AC dans le classeur familial, est prioritaire. À défaut, les cases grisées permettent de déduire un stock seulement si les cases visibles forment une séquence cohérente de 1 à N. Les quantités indéterminées restent à compléter. Les libellés combinés sont séparés quand c'est possible, en conservant leur texte source ; aucune appellation ambiguë n'est inventée.
+
+Le choix ou le dépôt d'un fichier lance automatiquement l'analyse, sans importer les vins. L'aperçu est modifiable et n'écrit rien en base. Les champs obligatoires manquants bloquent la confirmation des lignes sélectionnées. Un millésime absent n'est jamais remplacé automatiquement ; l'utilisateur doit saisir une année ou explicitement `0000` (inconnu). Cette valeur est également disponible dans les formulaires, affichée sur quatre chiffres et exclue du calcul de la bouteille la plus ancienne. Les dates d'achat complètes sont reprises pour les mouvements ; les dates textuelles partielles restent dans les commentaires. Sans date, le mouvement prend la date d'import. L'import confirmé est atomique ; les doublons augmentent le stock existant et enregistrent une entrée. Chaque compte dispose de 3 imports par mois calendaire, heure de Paris.
+
+L'export produit un classeur `.xlsx` avec un onglet par catégorie et un onglet Historique. Il est limité à 3 exports par mois calendaire, heure de Paris. Les données d'authentification ne sont jamais incluses. Le profil permet de modifier prénom et nom, et de demander le changement d'adresse e-mail après saisie du mot de passe. L'adresse actuelle reste active jusqu'à la validation de la nouvelle. La suppression définitive du compte, de ses vins, catégories et mouvements demande confirmation et mot de passe.
+
+Pour vérifier les parcours de données sur le serveur local, lancer `npm run test:cellar`, `npm run test:menu`, `npm run test:import` et `npm run test:email`. Ces scripts créent puis suppriment uniquement leurs comptes temporaires. Le test d'import vérifie aussi les nouveaux formats, les blocs, les stocks visuels, les dates et les millésimes inconnus ; un chemin de classeur familial peut lui être fourni pour une analyse sans import de ses données. Un petit CSV d'essai se trouve dans `scripts/fixtures/import-demo.csv`. Le test e-mail vérifie les droits et les jetons localement ; il n'envoie pas de vrai message Brevo.
+
+Les classeurs XLSX sont contrôlés avant lecture : au plus 100 fichiers internes et 12 Mo décompressés.
+
+## Informations légales
+
+Le footer public renvoie à `/legal` (mentions légales, confidentialité, cookies et conditions d'utilisation). Le service est gratuit, édité à titre personnel et sans offre payante. Les informations restant à confirmer sont entre crochets. Voir `DEPLOYMENT.md` pour les précisions concernant l'identification d'un éditeur non professionnel.
+
+## PostgreSQL et Supabase
+
+Le schéma et les migrations actifs utilisent PostgreSQL. Les anciennes migrations MySQL restent dans `prisma/legacy/mysql` comme archive. Les requêtes de verrouillage et la reprise des transactions concurrentes ont été adaptées.
+
+Pour une nouvelle migration MySQL : renseigner `MYSQL_SOURCE_URL`, lancer `npm run db:mysql-client`, puis `npm run db:import-mysql` pour le diagnostic. Arrêter les écritures sur la source et utiliser `npm run db:import-mysql -- --apply` pour copier vers une cible vide déjà migrée. L'outil sauvegarde les données dans `backups/`, contrôle toutes les valeurs dans une transaction et laisse la source intacte.
+
+Pour transférer la base PostgreSQL locale vers Supabase : appliquer d'abord les migrations sur Supabase puis renseigner `MIGRATION_TARGET_URL` et lancer `npm run db:copy-postgres -- --apply`. Ne pas relancer la copie depuis l'ancien MySQL si la cave a changé depuis la bascule. Les sessions et liens de réinitialisation ne sont pas transférés.
+
+Les étapes de déploiement, les variables Vercel et les contrôles avant ouverture sont dans [DEPLOYMENT.md](DEPLOYMENT.md).
