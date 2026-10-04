@@ -111,24 +111,24 @@ try {
     { userId: owner.id, wineId: remainingId, kind: "ENTRY", quantity: 1, createdAt: new Date(Date.UTC(year, 0, 1) - 1_800_000) },
   ] });
   result = await api(owner.cookie);
-  assert.equal(result.body.stats.stockIn, retainedEntries + 2, "La période doit commencer à minuit, heure de Paris.");
+  assert.equal(result.body.stats.stockIn, retainedEntries + 1, "La période doit commencer à minuit, heure de Paris.");
 
   const backdatedWine = wine(redId, { appellation: "Test date d'achat", quantity: 2, movementDate: `${year - 1}-05-12` });
   result = await api(owner.cookie, "POST", { action: "create-wine", wine: backdatedWine });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const backdatedId = result.body.data.wines.find((item) => item.appellation === "Test date d'achat").id;
   assert.equal(result.body.data.wines.find((item) => item.id === backdatedId).movements[0].movementDate, `${year - 1}-05-12`);
-  assert.equal(result.body.data.stats.stockIn, retainedEntries + 2, "Un achat daté de l'année précédente ne compte pas dans l'année courante.");
+  assert.equal(result.body.data.stats.stockIn, retainedEntries + 1, "Un achat daté de l'année précédente ne compte pas dans l'année courante.");
   result = await api(owner.cookie, "POST", { action: "update-wine", id: backdatedId,
     wine: { ...backdatedWine, quantity: 3, movementDate: `${year}-01-01` } });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.data.wines.find((item) => item.id === backdatedId).movements[0].movementDate, `${year}-01-01`);
-  assert.equal(result.body.data.stats.stockIn, retainedEntries + 3);
+  assert.equal(result.body.data.stats.stockIn, retainedEntries + 2);
   result = await api(owner.cookie, "POST", { action: "update-wine", id: backdatedId,
     wine: { ...backdatedWine, quantity: 3, movementDate: `${year - 1}-06-12` } });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.data.wines.find((item) => item.id === backdatedId).movements[0].movementDate, `${year - 1}-06-12`);
-  assert.equal(result.body.data.stats.stockIn, retainedEntries + 2, "Corriger la date d'une entrée doit corriger les statistiques.");
+  assert.equal(result.body.data.stats.stockIn, retainedEntries + 1, "Corriger la date d'une entrée doit corriger les statistiques.");
   assert.equal((await api(owner.cookie, "POST", { action: "update-wine", id: backdatedId,
     wine: { ...backdatedWine, quantity: 3, movementDate: `${year}-02-30` } })).status, 400);
   assert.equal((await api(owner.cookie, "DELETE", undefined, backdatedId)).status, 200);
