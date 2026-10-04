@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { hasAuthConfig, hashPrivateValue } from "@/lib/auth";
 import { CAPTCHA_COOKIE } from "@/lib/captcha";
+import { drawCaptcha } from "@/lib/captcha-image";
 import { prisma } from "@/lib/prisma";
 import { consumeRequestLimit, jsonError } from "@/lib/request";
 
@@ -10,23 +11,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function drawCaptcha(answer: string) {
-  const lines = Array.from({ length: 5 }, () => {
-    const x1 = randomInt(5, 225);
-    const y1 = randomInt(4, 66);
-    const x2 = randomInt(5, 225);
-    const y2 = randomInt(4, 66);
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#b987ad" stroke-width="1" opacity=".6"/>`;
-  }).join("");
-  const letters = [...answer].map((letter, index) => {
-    const x = 25 + index * 42 + randomInt(-3, 4);
-    const y = 47 + randomInt(-6, 7);
-    const angle = randomInt(-12, 13);
-    return `<text x="${x}" y="${y}" transform="rotate(${angle} ${x} ${y})" fill="#422147" font-family="Georgia,serif" font-size="35" font-weight="bold">${letter}</text>`;
-  }).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="230" height="70" viewBox="0 0 230 70" role="img" aria-label="CAPTCHA"><rect width="230" height="70" rx="8" fill="#f8edf4"/>${lines}${letters}</svg>`;
-}
 
 export async function GET(request: NextRequest) {
   if (!hasAuthConfig() || !process.env.DATABASE_URL) return jsonError("Le service est momentanément indisponible.", 503);
