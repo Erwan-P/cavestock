@@ -53,16 +53,22 @@ export async function POST(request: NextRequest) {
       sheet.getColumn(4).numFmt = "0000";
     }
     const history = workbook.addWorksheet("Historique");
-    history.addRow(["Date du mouvement", "Enregistré le", "Catégorie", ...headers.slice(0, 4), "Cuvée", "Mouvement", "Quantité déplacée"]);
+    history.addRow(["Date du mouvement", "Enregistré le", "Catégorie", ...headers.slice(0, 4), "Cuvée", "Mouvement", "Quantité déplacée", "État du vin"]);
     history.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
     history.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF9B318B" } };
-    history.columns = [{ width: 20 }, { width: 21 }, { width: 24 }, { width: 22 }, { width: 25 }, { width: 28 }, { width: 13 }, { width: 24 }, { width: 15 }, { width: 19 }];
+    history.columns = [{ width: 20 }, { width: 21 }, { width: 24 }, { width: 22 }, { width: 25 }, { width: 28 }, { width: 13 }, { width: 24 }, { width: 15 }, { width: 19 }, { width: 18 }];
     history.views = [{ state: "frozen", ySplit: 1 }];
-    history.autoFilter = { from: "A1", to: "J1" };
+    history.autoFilter = { from: "A1", to: "K1" };
     for (const movement of movements) history.addRow([
-      movement.movementDate ?? movement.createdAt, movement.createdAt, safeText(movement.wine.category.name), safeText(movement.wine.region),
-      safeText(movement.wine.appellation), safeText(movement.wine.domaine), movement.wine.vintage,
-      safeText(movement.wine.cuvee), movement.kind === "ENTRY" ? "Entrée" : "Sortie", movement.quantity,
+      movement.movementDate ?? movement.createdAt, movement.createdAt,
+      safeText(movement.wine?.category.name ?? movement.archivedCategoryName),
+      safeText(movement.wine?.region ?? movement.archivedRegion),
+      safeText(movement.wine?.appellation ?? movement.archivedAppellation),
+      safeText(movement.wine?.domaine ?? movement.archivedDomaine),
+      movement.wine?.vintage ?? movement.archivedVintage,
+      safeText(movement.wine?.cuvee ?? movement.archivedCuvee),
+      movement.kind === "ENTRY" ? "Entrée" : "Sortie", movement.quantity,
+      movement.wine ? "Dans la cave" : "Vin supprimé",
     ]);
     history.getColumn(1).numFmt = "dd/mm/yyyy";
     history.getColumn(2).numFmt = "dd/mm/yyyy hh:mm";

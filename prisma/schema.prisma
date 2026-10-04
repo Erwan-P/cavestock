@@ -117,13 +117,19 @@ enum MovementKind {
 model StockMovement {
   id           String       @id @default(cuid())
   userId       String
-  wineId       String
+  wineId       String?
   kind         MovementKind
   quantity     Int
   movementDate DateTime?     @db.Date
   createdAt    DateTime      @default(now())
+  archivedCategoryName String? @db.VarChar(100)
+  archivedRegion       String? @db.VarChar(150)
+  archivedAppellation  String? @db.VarChar(150)
+  archivedDomaine      String? @db.VarChar(150)
+  archivedVintage      Int?
+  archivedCuvee        String? @db.VarChar(150)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wine         Wine         @relation(fields: [wineId], references: [id], onDelete: Cascade)
+  wine         Wine?        @relation(fields: [wineId], references: [id], onDelete: SetNull)
   @@index([userId, createdAt])
   @@index([userId, movementDate])
   @@index([wineId, createdAt])

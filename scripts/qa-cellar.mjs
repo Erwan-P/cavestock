@@ -93,32 +93,42 @@ try {
   assert.equal(result.status, 200);
   assert.equal(result.body.data.wines.length, 1);
   assert.equal(await prisma.stockMovement.count({ where: { wineId: first.id } }), 0);
+  assert.equal(result.body.data.archivedMovements.length, 5);
+  assert.equal(result.body.data.archivedMovements[0].categoryName, "Vins doux");
+  assert.equal(result.body.data.archivedMovements[0].domaine, "Château de test");
+  assert.equal(result.body.data.stats.stockIn, 12);
+  assert.equal(result.body.data.stats.stockOut, 8);
+  const archivedId = result.body.data.archivedMovements[0].id;
+  assert.equal((await api(stranger.cookie)).body.archivedMovements.length, 0);
+  assert.equal((await api(owner.cookie, "DELETE", undefined, first.id)).status, 404);
+  assert.equal((await api(owner.cookie)).body.archivedMovements.find((movement) => movement.id === archivedId)?.categoryName, "Vins doux");
 
   const remainingId = result.body.data.wines[0].id;
   const year = result.body.data.stats.year;
+  const retainedEntries = result.body.data.stats.stockIn;
   await prisma.stockMovement.createMany({ data: [
     { userId: owner.id, wineId: remainingId, kind: "ENTRY", quantity: 1, createdAt: new Date(Date.UTC(year, 0, 1) - 5_400_000) },
     { userId: owner.id, wineId: remainingId, kind: "ENTRY", quantity: 1, createdAt: new Date(Date.UTC(year, 0, 1) - 1_800_000) },
   ] });
   result = await api(owner.cookie);
-  assert.equal(result.body.stats.stockIn, 2, "La période doit commencer à minuit, heure de Paris.");
+  assert.equal(result.body.stats.stockIn, retainedEntries + 2, "La période doit commencer à minuit, heure de Paris.");
 
   const backdatedWine = wine(redId, { appellation: "Test date d'achat", quantity: 2, movementDate: `${year - 1}-05-12` });
   result = await api(owner.cookie, "POST", { action: "create-wine", wine: backdatedWine });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   const backdatedId = result.body.data.wines.find((item) => item.appellation === "Test date d'achat").id;
   assert.equal(result.body.data.wines.find((item) => item.id === backdatedId).movements[0].movementDate, `${year - 1}-05-12`);
-  assert.equal(result.body.data.stats.stockIn, 2, "Un achat daté de l'année précédente ne compte pas dans l'année courante.");
+  assert.equal(result.body.data.stats.stockIn, retainedEntries + 2, "Un achat daté de l'année précédente ne compte pas dans l'année courante.");
   result = await api(owner.cookie, "POST", { action: "update-wine", id: backdatedId,
     wine: { ...backdatedWine, quantity: 3, movementDate: `${year}-01-01` } });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.data.wines.find((item) => item.id === backdatedId).movements[0].movementDate, `${year}-01-01`);
-  assert.equal(result.body.data.stats.stockIn, 3);
+  assert.equal(result.body.data.stats.stockIn, retainedEntries + 3);
   result = await api(owner.cookie, "POST", { action: "update-wine", id: backdatedId,
     wine: { ...backdatedWine, quantity: 3, movementDate: `${year - 1}-06-12` } });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.data.wines.find((item) => item.id === backdatedId).movements[0].movementDate, `${year - 1}-06-12`);
-  assert.equal(result.body.data.stats.stockIn, 2, "Corriger la date d'une entrée doit corriger les statistiques.");
+  assert.equal(result.body.data.stats.stockIn, retainedEntries + 2, "Corriger la date d'une entrée doit corriger les statistiques.");
   assert.equal((await api(owner.cookie, "POST", { action: "update-wine", id: backdatedId,
     wine: { ...backdatedWine, quantity: 3, movementDate: `${year}-02-30` } })).status, 400);
   assert.equal((await api(owner.cookie, "DELETE", undefined, backdatedId)).status, 200);

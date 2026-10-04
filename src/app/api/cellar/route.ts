@@ -145,9 +145,21 @@ export async function DELETE(request: NextRequest) {
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return jsonError("Vin introuvable.", 400);
   try {
-    const deleted = await prisma.wine.deleteMany({ where: { id, userId: user.id } });
-    if (deleted.count === 0) return jsonError("Vin introuvable.", 404);
-    return NextResponse.json({ message: "Vin et historique supprimés.", data: await getCellarData(user.id) });
+    const deleted = await serializableTransaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "Wine" WHERE id = ${id} AND "userId" = ${user.id} FOR UPDATE`;
+      if (locked.length === 0) return false;
+      const wine = await tx.wine.findUniqueOrThrow({ where: { id }, include: { category: { select: { name: true } } } });
+      await tx.stockMovement.updateMany({
+        where: { wineId: id, userId: user.id },
+        data: { wineId: null, archivedCategoryName: wine.category.name, archivedRegion: wine.region,
+          archivedAppellation: wine.appellation, archivedDomaine: wine.domaine,
+          archivedVintage: wine.vintage, archivedCuvee: wine.cuvee },
+      });
+      await tx.wine.delete({ where: { id } });
+      return true;
+    });
+    if (!deleted) return jsonError("Vin introuvable.", 404);
+    return NextResponse.json({ message: "Vin supprimé. Son historique reste consultable.", data: await getCellarData(user.id) });
   } catch (error) {
     return errorResponse(error);
   }

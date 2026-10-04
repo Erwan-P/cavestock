@@ -87,6 +87,7 @@
 .global-history__row time { color: #807681; font-weight: 650; }
 .global-history__category { font-weight: 750; }
 .global-history__wine { overflow-wrap: anywhere; line-height: 1.4; }
+.global-history__deleted { color: #8a5579; }
 .global-history__row strong { text-align: right; white-space: nowrap; }
 .global-history__row strong.is-entry { color: #247243; }
 .global-history__row strong.is-exit { color: #a52947; }

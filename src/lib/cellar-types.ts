@@ -12,6 +12,15 @@ export type CellarMovement = {
   movementDate: string | null;
 };
 
+export type ArchivedCellarMovement = CellarMovement & {
+  categoryName: string;
+  region: string;
+  appellation: string;
+  domaine: string;
+  vintage: number;
+  cuvee: string | null;
+};
+
 export type CellarWine = {
   id: string;
   categoryId: string;
@@ -29,6 +38,7 @@ export type CellarWine = {
 export type CellarData = {
   categories: CellarCategory[];
   wines: CellarWine[];
+  archivedMovements: ArchivedCellarMovement[];
   stats: {
     totalBottles: number;
     stockIn: number;

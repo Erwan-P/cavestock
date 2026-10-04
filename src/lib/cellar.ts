@@ -71,12 +71,18 @@ export async function getCellarData(userId: string): Promise<CellarData> {
   const end = new Date(Date.UTC(year + 1, 0, 1) - 3_600_000);
   const dateStart = new Date(Date.UTC(year, 0, 1));
   const dateEnd = new Date(Date.UTC(year + 1, 0, 1));
-  const [categories, wines, datedMovements, undatedMovements] = await Promise.all([
+  const [categories, wines, archivedMovements, datedMovements, undatedMovements] = await Promise.all([
     prisma.category.findMany({ where: { userId }, orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, position: true } }),
     prisma.wine.findMany({
       where: { userId },
       orderBy: [{ createdAt: "desc" }],
       include: { movements: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true, kind: true, quantity: true, movementDate: true, createdAt: true } } },
+    }),
+    prisma.stockMovement.findMany({
+      where: { userId, wineId: null },
+      select: { id: true, kind: true, quantity: true, movementDate: true, createdAt: true,
+        archivedCategoryName: true, archivedRegion: true, archivedAppellation: true,
+        archivedDomaine: true, archivedVintage: true, archivedCuvee: true },
     }),
     prisma.stockMovement.groupBy({
       by: ["kind"],
@@ -97,6 +103,19 @@ export async function getCellarData(userId: string): Promise<CellarData> {
   const stocked = wines.filter((wine) => wine.quantity > 0 && wine.vintage !== 0);
   return {
     categories,
+    archivedMovements: archivedMovements.map((movement) => ({
+      id: movement.id,
+      kind: movement.kind,
+      quantity: movement.quantity,
+      createdAt: movement.createdAt.toISOString(),
+      movementDate: movement.movementDate?.toISOString().slice(0, 10) ?? null,
+      categoryName: movement.archivedCategoryName ?? "Catégorie supprimée",
+      region: movement.archivedRegion ?? "",
+      appellation: movement.archivedAppellation ?? "",
+      domaine: movement.archivedDomaine ?? "",
+      vintage: movement.archivedVintage ?? 0,
+      cuvee: movement.archivedCuvee,
+    })),
     wines: wines.map((wine) => ({
       id: wine.id,
       categoryId: wine.categoryId,
