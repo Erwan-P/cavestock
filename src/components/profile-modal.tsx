@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Check, Trash2, X } from "lucide-react";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
@@ -18,18 +18,62 @@ export function ProfileModal({ firstName, lastName, email, onClose, onUpdated }:
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState(0);
   useDialogFocus(true, dialogRef, () => { if (!busy) onClose(); });
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/profile", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) return;
+      const result = await response.json();
+      if (active) { setPendingEmail(result.pendingEmail ?? null); setRetryAfterSeconds(result.retryAfterSeconds ?? 0); }
+    }).catch(() => { /* Le serveur vérifiera l'état lors de l'envoi. */ });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setRetryAfterSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firstName: first, lastName: last, email: nextEmail, password: changePassword }) });
       const result = await response.json();
+      if (result.pendingEmail) setPendingEmail(result.pendingEmail);
+      if (typeof result.retryAfterSeconds === "number") setRetryAfterSeconds(result.retryAfterSeconds);
       if (!response.ok) throw new Error(result.error ?? "Impossible de modifier le profil.");
       onUpdated(result.profile.firstName, result.profile.lastName);
       if (result.pendingEmail) { setNotice(result.message); setChangePassword(""); }
       else onClose();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Modification impossible."); }
+    finally { setBusy(false); }
+  }
+
+  async function resendVerification() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/profile/verification", { method: "POST" });
+      const result = await response.json();
+      if (typeof result.retryAfterSeconds === "number") setRetryAfterSeconds(result.retryAfterSeconds);
+      if (!response.ok) throw new Error(result.error ?? "Renvoi impossible.");
+      setPendingEmail(result.pendingEmail);
+      setNotice(result.message);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Renvoi impossible."); }
+    finally { setBusy(false); }
+  }
+
+  async function cancelVerification() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/profile/verification", { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Annulation impossible.");
+      setPendingEmail(null); setNextEmail(email); setChangePassword("");
+      setNotice(result.message);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Annulation impossible."); }
     finally { setBusy(false); }
   }
 
@@ -51,6 +95,9 @@ export function ProfileModal({ firstName, lastName, email, onClose, onUpdated }:
       <form className="profile-form" onSubmit={save}><label>Prénom<input value={first} onChange={(event) => setFirst(event.target.value)} minLength={1} maxLength={100} required /></label>
         <label>Nom<input value={last} onChange={(event) => setLast(event.target.value)} minLength={1} maxLength={100} required /></label>
         <label>Adresse e-mail<input type="email" value={nextEmail} onChange={(event) => setNextEmail(event.target.value)} maxLength={191} required /></label>
+        {pendingEmail && <div className="profile-email-pending"><p>Validation en attente pour <strong>{pendingEmail}</strong>.</p>
+          <div className="profile-email-pending__actions"><button type="button" onClick={() => void resendVerification()} disabled={busy || retryAfterSeconds > 0}>Renvoyer le lien{retryAfterSeconds > 0 ? ` (${retryAfterSeconds} s)` : ""}</button>
+            <button type="button" onClick={() => void cancelVerification()} disabled={busy}>Annuler la demande</button></div></div>}
         {nextEmail.trim().toLowerCase() !== email && <p className="profile-form__hint">La nouvelle adresse sera utilisée après validation du lien reçu par e-mail.</p>}
         {nextEmail.trim().toLowerCase() !== email && <label>Mot de passe actuel pour changer d’adresse e-mail<input type="password" value={changePassword} onChange={(event) => setChangePassword(event.target.value)} autoComplete="current-password" required /></label>}
         <button className="cellar-pill cellar-pill--save" type="submit" disabled={busy}><Check size={17} /> Enregistrer</button></form>

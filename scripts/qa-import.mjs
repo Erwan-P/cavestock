@@ -25,7 +25,7 @@ async function preview(content, filename) {
 const labels = ["Catégorie", "Région", "Appellation", "Domaine", "Millésime", "Quantité", "Prix par bouteille (€)", "Date d'achat", "Casier"];
 const values = ["Rouge", "Bordeaux", "Pomerol", "Domaine QA", "2020", "3", "15,50", "01/08/2026", "A4"];
 try {
-  const user = await prisma.user.create({ data: { firstName: "QA", lastName: "Import", email: `${randomUUID()}@example.invalid`, phone: "0000000000", passwordHash: "fixture-not-for-login", verifiedAt: new Date() } });
+  const user = await prisma.user.create({ data: { firstName: "QA", lastName: "Import", email: `${randomUUID()}@example.invalid`, passwordHash: "fixture-not-for-login", verifiedAt: new Date() } });
   fixtureId = user.id;
   const sid = randomUUID();
   await prisma.session.create({ data: { id: sid, userId: user.id, expiresAt: new Date(Date.now() + 3_600_000) } });

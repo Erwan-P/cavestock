@@ -45,6 +45,42 @@ export async function reserveRateLimit(purpose: string, value: string, max: numb
   };
 }
 
+function cooldownKey(purpose: string, userId: string) {
+  return hashPrivateValue("cooldown", `${purpose}:${userId}`);
+}
+
+export async function cooldownRemaining(purpose: string, userId: string) {
+  const record = await prisma.requestRateLimit.findUnique({ where: { key: cooldownKey(purpose, userId) }, select: { expiresAt: true } });
+  return Math.max(0, Math.ceil(((record?.expiresAt.getTime() ?? 0) - Date.now()) / 1000));
+}
+
+export async function reserveCooldown(purpose: string, userId: string, seconds: number) {
+  const key = cooldownKey(purpose, userId);
+  const reservation = await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+    if (!locked.length) return { allowed: false, retryAfterSeconds: 0, expiresAt: null };
+    const now = Date.now();
+    const current = await tx.requestRateLimit.findUnique({ where: { key }, select: { expiresAt: true } });
+    if (current && current.expiresAt.getTime() > now) {
+      return { allowed: false, retryAfterSeconds: Math.ceil((current.expiresAt.getTime() - now) / 1000), expiresAt: null };
+    }
+    const expiresAt = new Date(now + seconds * 1000);
+    await tx.requestRateLimit.upsert({
+      where: { key },
+      create: { key, count: 1, expiresAt },
+      update: { count: 1, expiresAt },
+    });
+    return { allowed: true, retryAfterSeconds: seconds, expiresAt };
+  });
+  return {
+    allowed: reservation.allowed,
+    retryAfterSeconds: reservation.retryAfterSeconds,
+    release: async () => {
+      if (reservation.expiresAt) await prisma.requestRateLimit.deleteMany({ where: { key, expiresAt: reservation.expiresAt } });
+    },
+  };
+}
+
 export function clientIp(request: NextRequest) {
   const header = process.env.TRUSTED_CLIENT_IP_HEADER?.toLowerCase();
   if (header !== "x-forwarded-for" && header !== "x-real-ip") return null;

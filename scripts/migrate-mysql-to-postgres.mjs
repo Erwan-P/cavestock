@@ -23,6 +23,7 @@ try {
   const snapshot = await source.$transaction(async (tx) => {
     const result = {};
     for (const model of models) result[model] = plain(await tx[model].findMany({ orderBy: { id: "asc" } }));
+    if (sourceEngine === "mysql") result.user = result.user.map(({ phone: _unusedPhone, ...user }) => user);
     return result;
   }, { isolationLevel: "RepeatableRead", timeout: 120_000 });
   const counts = Object.fromEntries(models.map(model => [model, snapshot[model].length]));

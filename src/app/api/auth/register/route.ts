@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
     if (!hasMailConfig()) return jsonError("L'inscription par e-mail est momentanément indisponible.", 503);
 
-    const { firstName, lastName, email, phone, password, captchaAnswer } = parsed.data;
+    const { firstName, lastName, email, password, captchaAnswer } = parsed.data;
     if (!(await consumeRequestLimit("inscription", request, 5, 100, 60))) {
       return jsonError("Trop de demandes. Réessayez plus tard.", 429);
     }
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         });
         if (consumed.count !== 1) throw new Error("CAPTCHA déjà utilisé ou expiré.");
         return tx.user.create({
-          data: { firstName, lastName, email, phone, passwordHash,
+          data: { firstName, lastName, email, passwordHash,
             emailVerification: { create: { email, tokenHash: verification.tokenHash, expiresAt: verification.expiresAt } } },
           select: { id: true },
         });

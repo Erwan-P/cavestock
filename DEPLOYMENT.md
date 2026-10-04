@@ -90,7 +90,6 @@ Le site est gratuit, sans entreprise ni bureau professionnel. Les zones entre cr
 
 - Identité/contact du responsable du traitement et choix d'identification de l'éditeur.
 - Coordonnées de l'hébergeur retenu et région Supabase.
-- Finalité du téléphone demandé à l'inscription ; s'il ne sert pas au service, prévoir de retirer sa collecte.
 - Conservation des comptes inactifs/non validés, des demandes de contact, des journaux et des sauvegardes.
 - Localisation des prestataires et garanties en cas de transferts hors EEE.
 

@@ -6,7 +6,7 @@ import { getCurrentUser, SESSION_COOKIE } from "@/lib/auth";
 import { replaceEmailToken, sendVerificationEmail } from "@/lib/email-verification";
 import { hasMailConfig, siteUrl } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
-import { consumeRateLimit, jsonError, requestIsSameOrigin } from "@/lib/request";
+import { consumeRateLimit, cooldownRemaining, jsonError, requestIsSameOrigin, reserveCooldown, reserveRateLimit } from "@/lib/request";
 
 const nameSchema = z.object({
   firstName: z.string().trim().min(1).max(100),
@@ -15,6 +15,14 @@ const nameSchema = z.object({
   password: z.string().optional(),
 });
 const deleteSchema = z.object({ password: z.string().min(1), confirmation: z.literal("SUPPRIMER") });
+const EMAIL_COOLDOWN_SECONDS = 60;
+
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return jsonError("Connexion requise.", 401);
+  const record = await prisma.user.findUnique({ where: { id: user.id }, select: { pendingEmail: true } });
+  return NextResponse.json({ pendingEmail: record?.pendingEmail ?? null, retryAfterSeconds: await cooldownRemaining("verification-email", user.id) }, { headers: { "Cache-Control": "no-store" } });
+}
 
 export async function PATCH(request: NextRequest) {
   if (!requestIsSameOrigin(request)) return jsonError("Requête refusée.", 403);
@@ -30,13 +38,30 @@ export async function PATCH(request: NextRequest) {
       const origin = siteUrl(new URL(request.url).origin);
       const record = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
       if (!password || !record || !await compare(password, record.passwordHash)) return jsonError("Mot de passe requis pour changer l'adresse e-mail.", 403);
-      if (!await consumeRateLimit("change-email", user.id, 3, 60)) return jsonError("Trop de demandes. Réessayez plus tard.", 429);
       const taken = await prisma.user.findFirst({ where: { id: { not: user.id }, OR: [{ email: nextEmail }, { pendingEmail: nextEmail }] }, select: { id: true } });
       if (taken) return jsonError("Cette adresse e-mail est déjà utilisée.", 409);
-      await prisma.user.update({ where: { id: user.id }, data: { firstName, lastName, pendingEmail: nextEmail } });
-      const token = await replaceEmailToken(user.id, nextEmail);
-      await sendVerificationEmail({ email: nextEmail, firstName, token, origin });
-      return NextResponse.json({ message: "Un lien de validation a été envoyé à la nouvelle adresse. L'adresse actuelle reste active jusque-là.", profile: { firstName, lastName, email: user.email }, pendingEmail: nextEmail });
+      const hourly = await reserveRateLimit("change-email", user.id, 3, 60);
+      if (!hourly.allowed) return jsonError("Trop de demandes. Réessayez plus tard.", 429);
+      let cooldown;
+      try { cooldown = await reserveCooldown("verification-email", user.id, EMAIL_COOLDOWN_SECONDS); }
+      catch (error) { await hourly.release(); throw error; }
+      if (!cooldown.allowed) {
+        await hourly.release();
+        return NextResponse.json({ error: "Patientez avant de demander un autre lien.", retryAfterSeconds: cooldown.retryAfterSeconds }, { status: 429, headers: { "Retry-After": String(cooldown.retryAfterSeconds) } });
+      }
+      let pendingSaved = false;
+      try {
+        await prisma.user.update({ where: { id: user.id }, data: { firstName, lastName, pendingEmail: nextEmail } });
+        pendingSaved = true;
+        const token = await replaceEmailToken(user.id, nextEmail);
+        await sendVerificationEmail({ email: nextEmail, firstName, token, origin });
+        return NextResponse.json({ message: "Un lien de validation a été envoyé à la nouvelle adresse. L'adresse actuelle reste active jusque-là.", profile: { firstName, lastName, email: user.email }, pendingEmail: nextEmail, retryAfterSeconds: EMAIL_COOLDOWN_SECONDS });
+      } catch (error) {
+        await Promise.allSettled([hourly.release(), cooldown.release()]);
+        if (!pendingSaved || error instanceof Prisma.PrismaClientKnownRequestError) throw error;
+        console.error("Envoi du changement d'adresse impossible :", error);
+        return NextResponse.json({ error: "Le lien n'a pas pu être envoyé. L'adresse reste en attente : utilisez « Renvoyer le lien » ou annulez la demande.", pendingEmail: nextEmail, retryAfterSeconds: 0 }, { status: 503 });
+      }
     }
     const updated = await prisma.user.update({ where: { id: user.id }, data: { firstName, lastName }, select: { firstName: true, lastName: true, email: true } });
     return NextResponse.json({ message: "Profil mis à jour.", profile: updated });

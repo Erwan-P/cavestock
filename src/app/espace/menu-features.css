@@ -48,6 +48,12 @@
 .profile-form label, .profile-danger label { display: grid; gap: 6px; color: #342b35; font-size: 13px; font-weight: 700; }
 .profile-form input, .profile-danger input { width: 100%; min-height: 39px; padding: 7px 10px; border: 1px solid #d8cbd6; border-radius: 5px; background: #fff; color: #211923; }
 .profile-form__hint { margin: -4px 0 0; color: #716874; font-size: 12px; line-height: 1.4; }
+.profile-email-pending { display: grid; gap: 6px; margin-top: -6px; font-size: 12px; line-height: 1.4; color: #65576a; }
+.profile-email-pending p { margin: 0; overflow-wrap: anywhere; }
+.profile-email-pending__actions { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.profile-email-pending__actions button { min-height: 30px; padding: 2px 0; border: 0; background: transparent; color: #8d267a; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.profile-email-pending__actions button:focus-visible { outline: 2px solid #8d267a; outline-offset: 2px; }
+.profile-email-pending__actions button:disabled { color: #827782; cursor: not-allowed; text-decoration: none; }
 .profile-form > button { justify-self: end; }
 .profile-danger { margin-top: 25px; padding-top: 20px; border-top: 1px solid #ded2dc; }
 .profile-danger h3 { margin: 0 0 8px; color: #9d1e2b; font: 700 18px Georgia, 'Times New Roman', serif; }
@@ -66,6 +72,7 @@
 .contact-form textarea { min-height: 150px; max-height: 420px; resize: vertical; line-height: 1.5; }
 .contact-form p { margin: -3px 0 0; color: #716874; font-size: 12px; line-height: 1.4; }
 .contact-form .cellar-form-error { margin: 0; color: #8e1e2a; }
+.contact-form .contact-form__cooldown { color: #65576a; }
 .contact-form > button, .contact-success button { justify-self: end; }
 .contact-success { display: grid; gap: 22px; text-align: center; }.contact-success p { margin: 5px 0 0; }
 @media (max-width: 480px) { .contact-form__names { grid-template-columns: 1fr; } }

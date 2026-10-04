@@ -9,7 +9,7 @@ const createdUsers = [];
 
 async function fixtureUser(name) {
   const user = await prisma.user.create({
-    data: { firstName: name, lastName: "Test", email: `${randomUUID()}@example.invalid`, phone: "0000000000", passwordHash: "temporary-test-user", verifiedAt: new Date() },
+    data: { firstName: name, lastName: "Test", email: `${randomUUID()}@example.invalid`, passwordHash: "temporary-test-user", verifiedAt: new Date() },
   });
   createdUsers.push(user.id);
   const sid = randomUUID();

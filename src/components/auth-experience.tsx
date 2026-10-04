@@ -12,6 +12,7 @@ export function AuthExperience({ initialMode }: { initialMode: Mode }) {
   const [height, setHeight] = useState<number | null>(null);
   const loginFace = useRef<HTMLDivElement>(null);
   const registerFace = useRef<HTMLDivElement>(null);
+  const focusAfterSwitch = useRef(false);
 
   useLayoutEffect(() => {
     const face = mode === "login" ? loginFace.current : registerFace.current;
@@ -24,13 +25,24 @@ export function AuthExperience({ initialMode }: { initialMode: Mode }) {
   }, [mode]);
 
   useEffect(() => {
-    const syncFromHistory = () => setMode(new URLSearchParams(window.location.search).get("mode") === "inscription" ? "register" : "login");
+    if (!focusAfterSwitch.current) return;
+    focusAfterSwitch.current = false;
+    const face = mode === "login" ? loginFace.current : registerFace.current;
+    face?.querySelector<HTMLInputElement>("input:not([disabled])")?.focus({ preventScroll: true });
+  }, [mode]);
+
+  useEffect(() => {
+    const syncFromHistory = () => {
+      focusAfterSwitch.current = true;
+      setMode(new URLSearchParams(window.location.search).get("mode") === "inscription" ? "register" : "login");
+    };
     window.addEventListener("popstate", syncFromHistory);
     return () => window.removeEventListener("popstate", syncFromHistory);
   }, []);
 
   function switchMode(next: Mode) {
     if (next === mode) return;
+    focusAfterSwitch.current = true;
     setMode(next);
     window.history.pushState(null, "", next === "register" ? "/connexion?mode=inscription" : "/connexion");
     window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });

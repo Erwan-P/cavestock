@@ -19,7 +19,7 @@ const row = (overrides = {}) => ({ source: "Feuil1 · ligne 2", category: "Vins 
   purchasePrice: "15.50", comment: "Ancien casier : A4", ...overrides });
 
 try {
-  const user = await prisma.user.create({ data: { firstName: "QA", lastName: "Menu", email: `${randomUUID()}@example.invalid`, phone: "0000000000", passwordHash: await hash(password, 12), verifiedAt: new Date() } });
+  const user = await prisma.user.create({ data: { firstName: "QA", lastName: "Menu", email: `${randomUUID()}@example.invalid`, passwordHash: await hash(password, 12), verifiedAt: new Date() } });
   fixtureId = user.id;
   const sid = randomUUID();
   await prisma.session.create({ data: { id: sid, userId: user.id, expiresAt: new Date(Date.now() + 3_600_000) } });
@@ -45,8 +45,8 @@ try {
   response = await api("/api/cellar/import/commit", cookie, "POST", JSON.stringify({ rows: [row({ region: "" })] }), { "Content-Type": "application/json" });
   assert.equal(response.status, 400);
   assert.equal(await prisma.dataTransfer.count({ where: { userId: user.id } }), 0);
-  for (const [email, phone] of [["pas-un-mail", "0612345678"], ["valide@example.fr", "06123456789"], ["valide@example.fr", "06 12 34 56 78"]]) {
-    response = await api("/api/auth/register", "", "POST", JSON.stringify({ firstName: "Test", lastName: "Validation", email, phone, password, captchaAnswer: "ABCDE" }), { "Content-Type": "application/json" });
+  for (const [email, candidatePassword] of [["pas-un-mail", password], ["valide@example.fr", "court"]]) {
+    response = await api("/api/auth/register", "", "POST", JSON.stringify({ firstName: "Test", lastName: "Validation", email, password: candidatePassword, captchaAnswer: "ABCDE" }), { "Content-Type": "application/json" });
     assert.equal(response.status, 400);
     assert.match((await response.json()).error, /Vérifiez les champs/);
   }

@@ -15,7 +15,6 @@ model User {
   email        String   @unique @db.VarChar(191)
   pendingEmail String?  @unique @db.VarChar(191)
   verifiedAt   DateTime?
-  phone        String   @db.VarChar(30)
   passwordHash String   @db.VarChar(255)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

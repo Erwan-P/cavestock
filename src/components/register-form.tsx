@@ -8,7 +8,6 @@ type Registration = {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
   password: string;
   captchaAnswer: string;
 };
@@ -17,7 +16,6 @@ const initialForm: Registration = {
   firstName: "",
   lastName: "",
   email: "",
-  phone: "",
   password: "",
   captchaAnswer: "",
 };
@@ -77,7 +75,6 @@ export function RegisterForm({ active, onSwitch }: { active: boolean; onSwitch: 
           <div className="field"><label htmlFor="last-name">Nom</label><input id="last-name" name="family-name" autoComplete="family-name" value={form.lastName} onChange={(event) => update("lastName", event.target.value)} placeholder="Votre nom" maxLength={100} required /></div>
         </div>
         <div className="field"><label htmlFor="register-email">Adresse e-mail</label><input id="register-email" type="email" autoComplete="email" value={form.email} onChange={(event) => update("email", event.target.value)} placeholder="vous@exemple.fr" maxLength={191} pattern="[^\s@.]+(\.[^\s@.]+)*@[^\s@.]+(\.[^\s@.]+)+" title="Saisissez une adresse du type nom@domaine.fr" required /></div>
-        <div className="field"><label htmlFor="phone">Téléphone</label><input id="phone" type="tel" inputMode="numeric" autoComplete="tel" value={form.phone} onChange={(event) => update("phone", event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="10 chiffres maximum" pattern="[0-9]{6,10}" title="Saisissez de 6 à 10 chiffres" maxLength={10} required /></div>
         <div className="field"><label htmlFor="register-password">Mot de passe</label><input id="register-password" type="password" autoComplete="new-password" value={form.password} onChange={(event) => update("password", event.target.value)} placeholder="10 caractères minimum" minLength={10} maxLength={72} required /></div>
         <div className="captcha-field">
           <label htmlFor="captcha-answer">Recopiez les caractères de l&apos;image</label>

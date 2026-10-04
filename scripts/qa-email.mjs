@@ -27,7 +27,7 @@ async function fixture(verificationToken, expired = false) {
   const user = await prisma.user.create({
     data: {
       firstName: "Validation", lastName: "QA", email,
-      phone: "0000000000", passwordHash: await hash(password, 12),
+      passwordHash: await hash(password, 12),
       emailVerification: { create: { email, tokenHash: verificationToken.tokenHash,
         expiresAt: new Date(Date.now() + (expired ? -60_000 : 60_000)) } },
     },

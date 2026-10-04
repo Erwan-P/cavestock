@@ -24,6 +24,7 @@ process.env.CAVESTOCK_SITE_URL = baseUrl;
 process.env.CAVESTOCK_MAIL_TEST_URL = `http://127.0.0.1:${mailServer.address().port}`;
 process.env.BREVO_API_KEY = "local-test-no-real-key";
 process.env.BREVO_SENDER_EMAIL = "test@example.invalid";
+process.env.CAVESTOCK_CONTACT_EMAIL = "contact@example.invalid";
 process.env.AUTH_SECRET = randomBytes(48).toString("hex");
 process.env.TRUSTED_CLIENT_IP_HEADER = "";
 process.env.CELLAR_TEST_URL = baseUrl;
@@ -45,7 +46,7 @@ async function post(path, body, cookie, origin = baseUrl) {
 }
 async function fixture(verified = true) {
   const user = await prisma.user.create({ data: { firstName: "QA", lastName: "Password", email: `${randomUUID()}@example.invalid`,
-    phone: "0000000000", passwordHash: await hash(oldPassword, 12), verifiedAt: verified ? new Date() : null } });
+    passwordHash: await hash(oldPassword, 12), verifiedAt: verified ? new Date() : null } });
   users.push(user.id); return user;
 }
 async function waitFor(check) {
@@ -121,6 +122,39 @@ try {
   assert.equal((await post("/api/auth/reset-password", { token: existing.token, password: newPassword })).status, 200); checks++;
   assert.match(await (await fetch(`${baseUrl}/connexion`)).text(), /Mot de passe oublié/);
   assert.equal((await fetch(`${baseUrl}/reinitialiser-mot-de-passe`)).status, 200); checks += 2;
+
+  const profileUser = await fixture();
+  const profileLogin = await post("/api/auth/login", { email: profileUser.email, password: oldPassword });
+  assert.equal(profileLogin.status, 200);
+  const nextEmail = `${randomUUID()}@example.invalid`;
+  refuseMail = true;
+  const failedChange = await fetch(`${baseUrl}/api/profile`, { method: "PATCH", headers: { "content-type": "application/json", origin: baseUrl, cookie: profileLogin.cookie },
+    body: JSON.stringify({ firstName: "QA", lastName: "Password", email: nextEmail, password: oldPassword }) });
+  assert.equal(failedChange.status, 503);
+  assert.equal((await failedChange.json()).pendingEmail, nextEmail);
+  assert.equal((await prisma.user.findUnique({ where: { id: profileUser.id } })).pendingEmail, nextEmail);
+  refuseMail = false;
+  const resent = await post("/api/profile/verification", {}, profileLogin.cookie);
+  assert.equal(resent.status, 200);
+  assert.equal(resent.body.retryAfterSeconds, 60);
+  assert.equal((await post("/api/profile/verification", {}, profileLogin.cookie)).status, 429);
+  const pendingState = await fetch(`${baseUrl}/api/profile`, { headers: { cookie: profileLogin.cookie } });
+  assert.equal((await pendingState.json()).pendingEmail, nextEmail);
+  const cancelled = await fetch(`${baseUrl}/api/profile/verification`, { method: "DELETE", headers: { origin: baseUrl, cookie: profileLogin.cookie } });
+  assert.equal(cancelled.status, 200);
+  assert.equal((await prisma.user.findUnique({ where: { id: profileUser.id } })).pendingEmail, null);
+  assert.equal(await prisma.emailVerificationToken.count({ where: { userId: profileUser.id } }), 0);
+  checks += 10;
+
+  const contact = await post("/api/contact", { message: "Message de contrôle du formulaire de contact." }, profileLogin.cookie);
+  assert.equal(contact.status, 200);
+  assert.equal(contact.body.retryAfterSeconds, 60);
+  const contactRetry = await post("/api/contact", { message: "Second message de contrôle du formulaire." }, profileLogin.cookie);
+  assert.equal(contactRetry.status, 429);
+  assert.ok(contactRetry.body.retryAfterSeconds > 0);
+  const contactState = await fetch(`${baseUrl}/api/contact`, { headers: { cookie: profileLogin.cookie } });
+  assert.ok((await contactState.json()).retryAfterSeconds > 0);
+  checks += 5;
   console.log(`Password reset QA: ${checks} checks passed; emails captured locally, none sent.`);
 
   if (process.argv.includes("--regression")) {
