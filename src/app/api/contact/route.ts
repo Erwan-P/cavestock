@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       await sendMail({
         to: { email: process.env.CAVESTOCK_CONTACT_EMAIL },
         replyTo: { email: user.email, name: `${user.firstName} ${user.lastName}` },
-        subject: `Contact CaveStock — ${user.firstName} ${user.lastName}`,
+        subject: `Contact CaveStock - ${user.firstName} ${user.lastName}`,
         textContent: `Message de ${user.firstName} ${user.lastName}\nAdresse : ${user.email}\nCompte : ${user.id}\n\n${parsed.data.message}`,
         tag: "cavestock-contact",
       });

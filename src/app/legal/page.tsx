@@ -2,7 +2,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Informations légales — CaveStock" };
+export const metadata = { title: "Informations légales - CaveStock" };
 const sections = [
   { id: "mentions-legales", label: "Mentions légales" },
   { id: "confidentialite", label: "Confidentialité" },
@@ -22,7 +22,7 @@ export default function LegalPage() {
           <span className="legal-section__number">01</span><h2>Mentions légales</h2>
           <p>Ce site est édité par une personne physique, à titre non professionnel. Il ne propose ni abonnement, ni achat, ni prestation payante.</p>
           <dl>
-            <div><dt>Éditeur et responsable de publication</dt><dd>[Prénom et nom de l’éditeur, ou identification non professionnelle à finaliser selon l’article 1-1 II de la LCEN]</dd></div>
+            <div><dt>Éditeur et responsable de publication</dt><dd>Éditeur non professionnel. Son identité a été communiquée à l’hébergeur conformément à l’article 1-1 II de la loi pour la confiance dans l’économie numérique (LCEN).</dd></div>
             <div><dt>Contact</dt><dd><a href="mailto:cavestock-contact@googlegroups.com">cavestock-contact@googlegroups.com</a></dd></div>
             <div><dt>Hébergement du site</dt><dd>Vercel Inc., 440 N Barranca Avenue #4133, Covina, CA 91723, États-Unis</dd></div>
             <div><dt>Hébergement de la base</dt><dd>Supabase Pte. Ltd., 65 Chulia Street #38-02/03, OCBC Centre, Singapore 049513 ; région du projet : Paris</dd></div>

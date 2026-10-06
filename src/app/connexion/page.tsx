@@ -4,7 +4,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getCurrentUser } from "@/lib/auth";
 
-export const metadata = { title: "Connexion ou inscription — CaveStock" };
+export const metadata = { title: "Connexion ou inscription - CaveStock" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   if (await getCurrentUser()) redirect("/espace");

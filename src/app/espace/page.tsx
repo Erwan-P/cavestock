@@ -5,7 +5,7 @@ import { getCellarData } from "@/lib/cellar";
 import "./cellar.css";
 import "./menu-features.css";
 
-export const metadata = { title: "Ma cave — CaveStock" };
+export const metadata = { title: "Ma cave - CaveStock" };
 
 export default async function SpacePage() {
   const user = await getCurrentUser();

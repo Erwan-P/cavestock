@@ -5,7 +5,7 @@ import { getCellarData } from "@/lib/cellar";
 import "../cellar.css";
 import "../menu-features.css";
 
-export const metadata = { title: "Historique — CaveStock" };
+export const metadata = { title: "Historique - CaveStock" };
 
 export default async function HistoryPage() {
   const user = await getCurrentUser();
