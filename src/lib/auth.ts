@@ -28,6 +28,14 @@ export async function createSessionToken(userId: string, expectedPasswordHash: s
     const user = await tx.user.findUnique({ where: { id: userId }, select: { passwordHash: true, verifiedAt: true } });
     if (!user?.verifiedAt || user.passwordHash !== expectedPasswordHash) return false;
     await tx.session.create({ data: { id, userId, expiresAt: new Date(Date.now() + SESSION_AGE_SECONDS * 1000) } });
+    await tx.user.update({ where: { id: userId }, data: {
+      lastLoginAt: new Date(),
+      inactivityNoticeAt: null,
+      inactivityDueAt: null,
+      inactivityAdminNoticeAt: null,
+      inactivityReminderAt: null,
+      inactivityAdminReminderAt: null,
+    } });
     return true;
   });
   if (!created) return null;

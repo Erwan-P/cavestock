@@ -18,6 +18,12 @@ model User {
   passwordHash String   @db.VarChar(255)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  lastLoginAt              DateTime?
+  inactivityNoticeAt       DateTime?
+  inactivityDueAt          DateTime?
+  inactivityAdminNoticeAt  DateTime?
+  inactivityReminderAt     DateTime?
+  inactivityAdminReminderAt DateTime?
   categories   Category[]
   wines        Wine[]
   movements    StockMovement[]
@@ -25,6 +31,8 @@ model User {
   sessions     Session[]
   emailVerification EmailVerificationToken?
   passwordResets PasswordResetToken[]
+  @@index([verifiedAt, createdAt])
+  @@index([inactivityDueAt])
 }
 
 model EmailVerificationToken {

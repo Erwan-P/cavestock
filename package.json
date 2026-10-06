@@ -13,6 +13,8 @@
     "test:import": "node --env-file-if-exists=.env scripts/qa-import.mjs",
     "test:email": "node --env-file-if-exists=.env scripts/qa-email.mjs",
     "test:password": "node --env-file-if-exists=.env scripts/qa-password-reset.mjs",
+    "test:retention": "node scripts/qa-account-retention.mjs",
+    "test:retention:integration": "node scripts/qa-account-retention-integration.mjs",
     "db:deploy": "prisma migrate deploy",
     "db:local": "prisma dev --name cavestock-postgres --detach",
     "db:mysql-client": "prisma generate --schema prisma/legacy/mysql/schema.prisma",
