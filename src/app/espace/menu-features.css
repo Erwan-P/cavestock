@@ -25,12 +25,6 @@
 .transfer-summary span { color: #655a65; }
 .transfer-summary button { margin-left: auto; border: 0; background: transparent; color: #8d267a; font-weight: 750; text-decoration: underline; }
 .transfer-hint { margin: 4px 0 14px; color: #6b626e; font-size: 12px; }
-.transfer-mapping { margin: 4px 0 15px; padding: 13px 16px; border: 1px solid #e2cde0; border-radius: 10px; background: #fbf5fa; }
-.transfer-mapping h3 { margin: 0 0 4px; color: #542348; font-size: 14px; }
-.transfer-mapping p { margin: 0 0 10px; color: #6b5c69; font-size: 12px; line-height: 1.4; }
-.transfer-mapping > div { display: flex; flex-wrap: wrap; gap: 10px; }
-.transfer-mapping label { display: flex; align-items: center; gap: 8px; color: #352935; font-size: 12px; font-weight: 700; }
-.transfer-mapping select { min-height: 32px; padding: 5px 8px; border: 1px solid #d6c1d1; border-radius: 6px; background: #fff; color: #332633; font-size: 12px; }
 .transfer-table-scroll { max-height: min(420px, 48vh); overflow: auto; border: 1px solid #e5dce5; border-radius: 10px; background: #fff; }
 .transfer-table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; }
 .transfer-table th { position: sticky; top: 0; z-index: 1; padding: 10px; background: #f0dcea; color: #44213d; text-align: left; white-space: nowrap; }

@@ -37,9 +37,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [activeJobId, setActiveJobId] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([]);
-  const [baseRows, setBaseRows] = useState<ImportRow[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [mapping, setMapping] = useState<Record<string, Editable | "">>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -77,7 +75,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
   async function submitFile(file: File) {
     if (busy || !canUpload) return;
     setFileName(file.name);
-    setBusy(true); setError(""); setRows([]); setBaseRows([]); setWarnings([]);
+    setBusy(true); setError(""); setRows([]); setWarnings([]);
     try {
       const body = new FormData(); body.set("file", file);
       const response = await fetch("/api/cellar/import/jobs", { method: "POST", body });
@@ -100,7 +98,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
       setFileName(job.fileName); setActiveJobId(job.id);
       setWarnings(result.analysis.warnings ?? []);
       const cleanRows = result.analysis.rows.map(cleanImportedRow);
-      setRows(cleanRows); setBaseRows(cleanRows); setMapping({});
+      setRows(cleanRows);
       setSelected(new Set(result.analysis.rows.map((_, index) => index)));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Aperçu impossible."); }
     finally { setBusy(false); }
@@ -113,7 +111,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
       const response = await fetch(`/api/cellar/import/jobs/${encodeURIComponent(job.id)}`, { method: "DELETE" });
       if (!response.ok) throw new Error(await errorMessage(response));
       setJobs((current) => current.filter((item) => item.id !== job.id));
-      if (activeJobId === job.id) { setActiveJobId(""); setRows([]); setBaseRows([]); setWarnings([]); setFileName(""); }
+      if (activeJobId === job.id) { setActiveJobId(""); setRows([]); setWarnings([]); setFileName(""); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Suppression impossible."); }
     finally { setBusy(false); }
   }
@@ -129,19 +127,6 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
       onImported(result.data);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Import impossible."); }
     finally { setBusy(false); }
-  }
-
-  function mapColumn(header: string, field: Editable | "") {
-    const next = { ...mapping, [header]: field };
-    setMapping(next);
-    setRows(baseRows.map((original) => {
-      const mapped = { ...original };
-      for (const [name, value] of Object.entries(original.unknownFields ?? {})) {
-        const target = next[name];
-        if (target && target !== "comment") mapped[target] = value;
-      }
-      return mapped;
-    }));
   }
 
   async function exportData() {
@@ -162,7 +147,6 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
 
   const picked = rows.filter((_, index) => selected.has(index));
   const invalid = picked.filter((row) => !valid(row)).length;
-  const unknownHeaders = Array.from(new Set(baseRows.flatMap((row) => Object.keys(row.unknownFields ?? {}))));
   return <div className="cellar-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} tabIndex={-1} className={`cellar-dialog transfer-dialog${mode === "export" || !rows.length ? " transfer-dialog--short" : ""}`} role="dialog" aria-modal="true" aria-labelledby="transfer-title">
       <button type="button" className="cellar-dialog__close" aria-label="Fermer" onClick={onClose} disabled={busy}><X size={26} /></button>
@@ -188,9 +172,6 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
         {rows.length > 0 && <><div className="transfer-summary"><strong>{rows.length} ligne{rows.length > 1 ? "s" : ""} détectée{rows.length > 1 ? "s" : ""}</strong><span>{picked.length} sélectionnée{picked.length > 1 ? "s" : ""} · {invalid} à corriger</span>
           <button type="button" onClick={() => setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((_, index) => index)))}>{selected.size === rows.length ? "Tout désélectionner" : "Tout sélectionner"}</button></div>
           {warnings.length > 0 && <ul className="transfer-warnings">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-          {unknownHeaders.length > 0 && <div className="transfer-mapping"><h3>Colonnes à classer</h3><p>Ces valeurs restent visibles dans la colonne Source. Choisissez une destination si l’une d’elles correspond à un champ de la cave. Faites ce choix avant de corriger les lignes.</p><div>
-            {unknownHeaders.map((header) => <label key={header}>{header}<select value={mapping[header] ?? ""} onChange={(event) => mapColumn(header, event.target.value as Editable | "")}><option value="">Ne pas importer</option>{fields.filter((field) => field.key !== "comment").map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label>)}
-          </div></div>}
           <p className="transfer-hint">Les catégories absentes seront créées. Les vins déjà présents recevront les quantités importées. Le millésime est obligatoire : renseignez une année ou 0000 s'il est inconnu. La date d'achat est facultative ; sans date, le mouvement sera daté du jour de l'import. Les champs signalés doivent être corrigés, ou la ligne désélectionnée. Faites défiler le tableau horizontalement pour voir tous les champs.</p>
           <div className="transfer-table-scroll"><table className="transfer-table"><thead><tr><th scope="col">Importer</th><th scope="col">Source</th>{fields.map((field) => <th scope="col" key={field.key}>{field.label}</th>)}</tr></thead><tbody>
             {rows.map((row, index) => { const errors = importRowErrors(row); return <tr key={`${row.source}-${index}`} className={selected.has(index) && !valid(row) ? "is-invalid" : ""}>
