@@ -13,6 +13,7 @@ const row = z.object({
   domaine: z.string().max(150), vintage: z.string().max(20), quantity: z.string().max(20),
   cuvee: z.string().max(150), purchasePrice: z.string().max(30), movementDate: z.string().max(30),
   comment: z.string().max(2000),
+  rawLabel: z.string().max(500).optional(),
   warnings: z.array(z.string().max(300)).max(20).optional(),
   unknownFields: z.record(z.string().max(100), z.string().max(500)).optional(),
   baseComment: z.string().max(2000).optional(),

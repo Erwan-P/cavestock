@@ -2,7 +2,7 @@ import unittest
 import base64
 from unittest.mock import patch
 
-from import_worker import apply_reviews, parse_local, process_job
+from import_worker import apply_reviews, harmonize_repeated_labels, parse_local, process_job
 
 
 class ImportWorkerTest(unittest.TestCase):
@@ -38,6 +38,19 @@ class ImportWorkerTest(unittest.TestCase):
         self.assertEqual(rows[0]["appellation"], "Condrieu")
         self.assertEqual(rows[0]["domaine"], "Domaine Exemple")
         self.assertEqual(rows[0]["cuvee"], "")
+
+    def test_repeated_label_uses_consensus_when_one_ai_batch_misses_it(self):
+        label = "Libellé source : Saint-Estèphe- château Haut-Marbuzet"
+        rows = [{"source": "ligne 21", "category": "Vins Rouge", "region": "BORDEAUX",
+                 "appellation": "", "domaine": "Saint-Estèphe- château Haut-Marbuzet",
+                 "cuvee": "", "comment": label, "warnings": ["Appellation non identifiable dans le libellé : à compléter."]},
+                {"source": "ligne 22", "category": "Vins Rouge", "region": "BORDEAUX",
+                 "appellation": "Saint-Estèphe", "domaine": "château Haut-Marbuzet",
+                 "cuvee": "", "comment": label, "warnings": []}]
+        harmonize_repeated_labels(rows)
+        self.assertEqual(rows[0]["appellation"], "Saint-Estèphe")
+        self.assertEqual(rows[0]["domaine"], "château Haut-Marbuzet")
+        self.assertFalse(rows[0]["warnings"])
 
     def test_pipeline_submits_local_parser_result_after_ai_review(self):
         content = ("Appellation;Domaine;Millésime;Quantité\n"

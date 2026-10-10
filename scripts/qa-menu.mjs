@@ -38,7 +38,7 @@ try {
   response = await api("/api/cellar/import/preview", cookie, "POST", form);
   assert.equal(response.status, 200, await response.clone().text());
   let preview = await response.json();
-  assert.equal(preview.rows[0].comment, "Casier : A4");
+  assert.equal(preview.rows[0].comment, "");
   assert.equal(preview.rows[0].unknownFields.Casier, "A4");
   assert.equal(await prisma.wine.count({ where: { userId: user.id } }), 0, "L'aperçu ne doit rien écrire.");
 
@@ -55,7 +55,7 @@ try {
   let data = (await response.json()).data;
   assert.equal(data.wines.length, 1);
   assert.equal(data.wines[0].quantity, 3);
-  assert.match(data.wines[0].comment, /Casier : A4/);
+  assert.equal(data.wines[0].comment, "");
   assert.equal(data.wines[0].movements[0].kind, "ENTRY");
 
   const vertical = new ExcelJS.Workbook(); const sheet = vertical.addWorksheet("Champagnes");
@@ -66,7 +66,7 @@ try {
   assert.equal(response.status, 200, await response.clone().text());
   preview = await response.json();
   assert.equal(preview.rows[0].category, "Champagnes");
-  assert.equal(preview.rows[0].comment, "Casier : B7");
+  assert.equal(preview.rows[0].comment, "");
 
   const oversized = new ExcelJS.Workbook();
   const oversizedSheet = oversized.addWorksheet("Vins Rouge");

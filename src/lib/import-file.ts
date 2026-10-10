@@ -128,17 +128,19 @@ function finalize(row: ImportRow): ImportRow {
     const date = fullDate(row.movementDate);
     if (!date) {
       row.unknownFields!["Date d'achat source"] = row.movementDate;
-      row.warnings!.push("Date d'achat incomplète ou non reconnue, conservée dans les commentaires.");
+      row.warnings!.push("Date d'achat incomplète ou non reconnue : à vérifier.");
     }
     row.movementDate = date;
   }
   row.baseComment = row.comment;
-  row.comment = [row.baseComment, ...Object.entries(row.unknownFields!).map(([key, value]) => `${key} : ${value}`)].filter(Boolean).join(" · ");
   return row;
 }
 function splitWineName(row: ImportRow, raw: string) {
-  const parts = raw.split(/\s+[–—-]\s+|-(?=(?:ch[aâ]teau|domaine|clos)\b)/i).map((part) => displayText(part)).filter(Boolean);
-  row.comment = [row.comment, `Libellé source : ${raw}`].filter(Boolean).join(" · ");
+  const parts = raw.split(/\s+[–—-]\s+|-(?=\s*(?:ch[aâ]teau|domaine|clos)\b)/i).map((part) => displayText(part)).filter(Boolean);
+  row.rawLabel = raw;
+  // Some inventories put the year in the wine name instead of the vintage column.
+  const namedVintage = raw.match(/\bmill[ée]sime\s*[:\s-]*(19\d{2}|20\d{2})\b/i);
+  if (!row.vintage && namedVintage) row.vintage = namedVintage[1];
   if (row.category === "Champagnes") {
     row.region = "Champagne"; row.appellation = "Champagne";
     row.domaine = parts[0] ?? raw; row.cuvee = parts.slice(1).join(" - ");

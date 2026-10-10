@@ -34,12 +34,14 @@ try {
   let data = await preview(csv, "avec-titre.csv");
   assert.equal(data.rows.length, 1); assert.equal(data.rows[0].source, "Feuil1 · ligne 4");
   assert.equal(data.rows[0].category, "Vins Rouge"); assert.equal(data.rows[0].purchasePrice, "15.50");
-  assert.equal(data.rows[0].movementDate, "2026-08-01"); assert.match(data.rows[0].comment, /Casier : A4/);
+  assert.equal(data.rows[0].movementDate, "2026-08-01"); assert.equal(data.rows[0].comment, "");
+  assert.equal(data.rows[0].unknownFields.Casier, "A4");
   const completeRow = data.rows[0];
   data = await preview(Buffer.from(`\ufeffsep=;\n${labels.join(";")}\n${values.join(";")}`, "utf16le"), "utf16.csv");
   assert.equal(data.rows[0].region, "Bordeaux");
   data = await preview(`Titre\n${labels.join(",")}\nRouge,Bordeaux,Pomerol,Domaine QA,2020,3,"15,50",01/08/2026,"A4, aile gauche\nNote"`, "virgules.csv");
-  assert.equal(data.rows[0].purchasePrice, "15.50"); assert.match(data.rows[0].comment, /aile gauche/);
+  assert.equal(data.rows[0].purchasePrice, "15.50"); assert.equal(data.rows[0].comment, "");
+  assert.match(data.rows[0].unknownFields.Casier, /aile gauche/);
   const cp1252 = "R\xe9gion;Appellation;Domaine;Mill\xe9sime;Quantit\xe9\nBordeaux;Pomerol;Ch\xe2teau QA;2020;2";
   data = await preview(Buffer.from(cp1252, "latin1"), "ancien.csv");
   assert.equal(data.rows[0].domaine, "Château QA");
@@ -77,6 +79,9 @@ try {
   assert.ok(data.rows[1].warnings.some((warning) => warning.includes("diffèrent")));
   assert.equal(data.rows[2].quantity, "", "Sans compteur ni gris lisible, ne jamais supposer un stock.");
   assert.equal(data.rows[3].quantity, "0"); assert.equal(data.rows[0].movementDate, "2026-08-01");
+  assert.equal(data.rows[0].rawLabel, "Pomerol - Château QA");
+  assert.equal(data.rows[0].comment, "");
+  assert.equal(data.rows[1].comment, "Casier B", "Un vrai commentaire du fichier doit rester dans le champ commentaire.");
 
   const structured = new ExcelJS.Workbook(); const st = structured.addWorksheet("Vin rouge");
   st.addRow(["Région", "Appellation", "Domaine", "Millésime", "Nombre de bouteilles", "", "", "", "", "Prix"]);
@@ -122,7 +127,14 @@ try {
       const [sheet, number] = row.source.split(" · ligne ");
       assert.equal(Number(row.quantity), Number(workbook.Sheets[sheet][`AC${number}`]?.v), row.source);
     }
-    assert.equal(data.rows.length, 438); assert.equal(data.rows.filter((row) => !row.vintage).length, 9);
+    assert.equal(data.rows.length, 438); assert.equal(data.rows.filter((row) => !row.vintage).length, 8);
+    const saintEstephe = data.rows.find((row) => row.source === "Vin rouge · ligne 21");
+    assert.equal(saintEstephe.appellation, "Saint-Estèphe");
+    assert.equal(saintEstephe.domaine, "château Haut-Marbuzet");
+    const champagne2013 = data.rows.find((row) => row.source === "Vin blanc & champ · ligne 182");
+    assert.equal(champagne2013.vintage, "2013");
+    assert.equal(champagne2013.cuvee, "Millésime 2013");
+    assert.ok(data.rows.every((row) => !row.comment.includes("Libellé source :")));
     assert.equal(Object.values(totals).reduce((sum, value) => sum + value, 0), 778);
     assert.equal(await prisma.wine.count({ where: { userId: user.id } }), 1, "Le vrai fichier est uniquement analysé, jamais importé.");
     checks++;

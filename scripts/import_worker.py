@@ -23,7 +23,7 @@ from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
-FIELDS = ("category", "region", "appellation", "domaine", "cuvee")
+FIELDS = ("category", "region", "appellation", "domaine", "cuvee", "vintage")
 LOCAL_KEYS = {"CAVESTOCK_URL", "IMPORT_WORKER_TOKEN", "LM_STUDIO_MODEL", "LM_STUDIO_URL", "BRAVE_SEARCH_API_KEY"}
 
 
@@ -63,6 +63,8 @@ def normalized(value: str) -> str:
 
 
 def source_label(row: dict) -> str:
+    if row.get("rawLabel"):
+        return str(row["rawLabel"])
     match = re.search(r"Libellé source\s*:\s*(.*?)(?:\s*·\s*[^·]*\s*:|$)", row.get("comment", ""), re.I)
     if match:
         return match.group(1).strip()
@@ -101,13 +103,14 @@ def model_response(model: str, server: str, rows: list[dict], references: dict[s
     instructions = (
         "Tu contrôles une extraction de vins. Réponds en JSON strict, objet {reviews:[{source,fields,warnings}]}. "
         "Un review par ligne, source identique. fields contient seulement les corrections utiles parmi "
-        "category,region,appellation,domaine,cuvee. Aucune donnée inventée. Une valeur ajoutée ou corrigée doit "
+        "category,region,appellation,domaine,cuvee,vintage. Aucune donnée inventée. Une valeur ajoutée ou corrigée doit "
         "figurer littéralement dans le libellé ou l'extrait fourni; tu peux déplacer une expression entre champs. "
         "Les références web servent uniquement à vérifier le sens d'un terme, jamais à créer un champ absent du fichier. "
         "Une appellation doit être une appellation de vin, pas un domaine ni une cuvée. "
         "Une cuvée doit être un nom de cuvée ou lieu-dit explicitement présent. "
         "Si une classification est incertaine, conserve l'analyse et explique le doute dans warnings. "
-        "N'altère jamais millésime, quantité, prix, date ou commentaire. "
+        "Un millésime manquant peut être rempli uniquement si le libellé indique explicitement 'Millésime AAAA'. "
+        "Ne modifie jamais un millésime déjà renseigné, ni la quantité, le prix, la date ou le commentaire. "
         "Ne mets aucun texte hors JSON."
     )
     review_schema = {"type": "object", "properties": {"reviews": {"type": "array", "items": {
@@ -145,7 +148,7 @@ def apply_reviews(rows: list[dict], response: dict) -> None:
             continue
         row = by_source[review["source"]]
         checked.add(row["source"])
-        evidence = normalized(row["source"] + " " + source_label(row) + " " + row.get("comment", ""))
+        evidence = normalized(source_label(row) + " " + row.get("comment", ""))
         changes = review.get("fields", {})
         if isinstance(changes, dict):
             for field, proposed in changes.items():
@@ -154,13 +157,19 @@ def apply_reviews(rows: list[dict], response: dict) -> None:
                 proposed = proposed.strip()
                 if not proposed or proposed == row.get(field):
                     continue
+                if field == "vintage":
+                    if row.get("vintage") or not re.fullmatch(r"(?:19|20)\d{2}", proposed) or not re.search(
+                        rf"\bmillesime\s*[:\s-]*{re.escape(proposed)}\b", evidence
+                    ):
+                        row.setdefault("warnings", []).append("Suggestion IA écartée pour millésime : année non explicitement indiquée.")
+                        continue
                 # The existing region/category may come from a sheet heading; don't erase it without evidence.
                 if normalized(proposed) not in evidence and normalized(proposed) not in normalized(" ".join(str(row.get(key, "")) for key in FIELDS)):
                     row.setdefault("warnings", []).append(f"Suggestion IA écartée pour {field} : valeur absente du fichier.")
                     continue
                 row[field] = proposed
             for field, proposed in changes.items():
-                if field not in FIELDS or proposed != "" or not row.get(field):
+                if field not in FIELDS or field == "vintage" or proposed != "" or not row.get(field):
                     continue
                 old_value = normalized(str(row[field]))
                 if any(other != field and normalized(str(row.get(other, ""))) == old_value for other in FIELDS):
@@ -168,10 +177,44 @@ def apply_reviews(rows: list[dict], response: dict) -> None:
         for warning in review.get("warnings", []) if isinstance(review.get("warnings"), list) else []:
             if isinstance(warning, str) and warning.strip() and len(warning) <= 250:
                 row.setdefault("warnings", []).append(warning.strip())
+        if row.get("appellation"):
+            row["warnings"] = [warning for warning in row.get("warnings", []) if not warning.startswith("Appellation non identifiable")]
+        if row.get("vintage"):
+            row["warnings"] = [warning for warning in row.get("warnings", []) if not warning.startswith("Millésime à renseigner")]
         row["warnings"] = list(dict.fromkeys(row.get("warnings", [])))[:20]
     for row in rows:
         if row["source"] not in checked:
             row.setdefault("warnings", []).append("Contrôle IA non obtenu pour cette ligne : vérifiez-la manuellement.")
+
+
+def harmonize_repeated_labels(rows: list[dict]) -> None:
+    """Reuse a unanimous classification for the exact same wine label across vintages."""
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for row in rows:
+        key = (normalized(source_label(row)), normalized(row.get("category", "")), normalized(row.get("region", "")))
+        if key[0]:
+            groups.setdefault(key, []).append(row)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        for field in ("appellation", "domaine", "cuvee"):
+            values = {normalized(row[field]): row[field] for row in group if row.get(field)}
+            if len(values) != 1:
+                continue
+            value = next(iter(values.values()))
+            for row in group:
+                if not row.get(field) and normalized(value) in normalized(source_label(row)):
+                    row[field] = value
+                    if field == "appellation":
+                        row["warnings"] = [warning for warning in row.get("warnings", [])
+                                           if not warning.startswith("Appellation non identifiable")]
+    for row in rows:
+        appellation = row.get("appellation", "").strip()
+        domaine = row.get("domaine", "").strip()
+        if appellation and domaine:
+            prefix = re.match(rf"^{re.escape(appellation)}\s*[-–—]\s*(.+)$", domaine, re.I)
+            if prefix and normalized(prefix.group(1)) in normalized(source_label(row)):
+                row["domaine"] = prefix.group(1).strip()
 
 
 def review_analysis(analysis: dict, *, model: str, server: str, search_key: str, heartbeat=None) -> dict:
@@ -192,6 +235,7 @@ def review_analysis(analysis: dict, *, model: str, server: str, search_key: str,
         if heartbeat:
             heartbeat()
         print(f"IA : {min(offset + 6, len(rows))}/{len(rows)} lignes contrôlées", file=sys.stderr, flush=True)
+    harmonize_repeated_labels(rows)
     analysis["warnings"] = list(dict.fromkeys(analysis.get("warnings", [])))[:100]
     return analysis
 

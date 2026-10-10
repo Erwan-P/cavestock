@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Check, Download, FileSpreadsheet, X } from "lucide-react";
 import type { CellarData } from "@/lib/cellar-types";
+import { cleanImportedRow } from "@/lib/clean-import-row";
 import { importRowErrors, type ImportField, type ImportRow } from "@/lib/import-types";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
@@ -17,7 +18,7 @@ const fields: Array<{ key: Editable; label: string; width?: number }> = [
   { key: "vintage", label: "Millésime", width: 90 }, { key: "quantity", label: "Quantité", width: 85 },
   { key: "cuvee", label: "Cuvée", width: 120 }, { key: "purchasePrice", label: "Prix / bouteille (€)", width: 90 },
   { key: "movementDate", label: "Date d'achat / mouvement", width: 140 },
-  { key: "comment", label: "Commentaire et colonnes non utilisées", width: 250 },
+  { key: "comment", label: "Commentaire", width: 250 },
 ];
 
 async function errorMessage(response: Response) {
@@ -98,7 +99,8 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
       if (!result.analysis?.rows?.length) throw new Error("L'aperçu est indisponible.");
       setFileName(job.fileName); setActiveJobId(job.id);
       setWarnings(result.analysis.warnings ?? []);
-      setRows(result.analysis.rows); setBaseRows(result.analysis.rows); setMapping({});
+      const cleanRows = result.analysis.rows.map(cleanImportedRow);
+      setRows(cleanRows); setBaseRows(cleanRows); setMapping({});
       setSelected(new Set(result.analysis.rows.map((_, index) => index)));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Aperçu impossible."); }
     finally { setBusy(false); }
@@ -134,13 +136,10 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
     setMapping(next);
     setRows(baseRows.map((original) => {
       const mapped = { ...original };
-      const extras: string[] = [];
       for (const [name, value] of Object.entries(original.unknownFields ?? {})) {
         const target = next[name];
         if (target && target !== "comment") mapped[target] = value;
-        else extras.push(`${name} : ${value}`);
       }
-      mapped.comment = [original.baseComment, ...extras].filter(Boolean).join(" · ");
       return mapped;
     }));
   }
@@ -189,14 +188,14 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
         {rows.length > 0 && <><div className="transfer-summary"><strong>{rows.length} ligne{rows.length > 1 ? "s" : ""} détectée{rows.length > 1 ? "s" : ""}</strong><span>{picked.length} sélectionnée{picked.length > 1 ? "s" : ""} · {invalid} à corriger</span>
           <button type="button" onClick={() => setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((_, index) => index)))}>{selected.size === rows.length ? "Tout désélectionner" : "Tout sélectionner"}</button></div>
           {warnings.length > 0 && <ul className="transfer-warnings">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-          {unknownHeaders.length > 0 && <div className="transfer-mapping"><h3>Colonnes à classer</h3><p>Par défaut, leurs valeurs sont conservées dans les commentaires. Choisissez une destination si l’une d’elles correspond à un champ de la cave. Faites ce choix avant de corriger les lignes.</p><div>
-            {unknownHeaders.map((header) => <label key={header}>{header}<select value={mapping[header] ?? ""} onChange={(event) => mapColumn(header, event.target.value as Editable | "")}><option value="">Garder dans les commentaires</option>{fields.filter((field) => field.key !== "comment").map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label>)}
+          {unknownHeaders.length > 0 && <div className="transfer-mapping"><h3>Colonnes à classer</h3><p>Ces valeurs restent visibles dans la colonne Source. Choisissez une destination si l’une d’elles correspond à un champ de la cave. Faites ce choix avant de corriger les lignes.</p><div>
+            {unknownHeaders.map((header) => <label key={header}>{header}<select value={mapping[header] ?? ""} onChange={(event) => mapColumn(header, event.target.value as Editable | "")}><option value="">Ne pas importer</option>{fields.filter((field) => field.key !== "comment").map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label>)}
           </div></div>}
           <p className="transfer-hint">Les catégories absentes seront créées. Les vins déjà présents recevront les quantités importées. Le millésime est obligatoire : renseignez une année ou 0000 s'il est inconnu. La date d'achat est facultative ; sans date, le mouvement sera daté du jour de l'import. Les champs signalés doivent être corrigés, ou la ligne désélectionnée. Faites défiler le tableau horizontalement pour voir tous les champs.</p>
           <div className="transfer-table-scroll"><table className="transfer-table"><thead><tr><th scope="col">Importer</th><th scope="col">Source</th>{fields.map((field) => <th scope="col" key={field.key}>{field.label}</th>)}</tr></thead><tbody>
             {rows.map((row, index) => { const errors = importRowErrors(row); return <tr key={`${row.source}-${index}`} className={selected.has(index) && !valid(row) ? "is-invalid" : ""}>
               <td><input type="checkbox" aria-label={`Importer ${row.source}`} checked={selected.has(index)} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })} /></td>
-              <td>{row.source}{Boolean(row.warnings?.length) && <details className="transfer-row-notes"><summary>À vérifier</summary>{row.warnings!.map((warning, note) => <p key={note}>{warning}</p>)}</details>}</td>{fields.map((field) => <td key={field.key}><input aria-label={`${field.label}, ${row.source}`} aria-invalid={Boolean(errors[field.key])} aria-describedby={errors[field.key] ? `import-error-${index}-${field.key}` : undefined} type={field.key === "movementDate" ? "date" : "text"} placeholder={field.key === "vintage" ? "Année / 0000" : undefined} style={{ width: field.width }} value={row[field.key]} onChange={(event) => updateRow(index, field.key, event.target.value)} />{errors[field.key] && <small id={`import-error-${index}-${field.key}`} className="transfer-field-error">{errors[field.key]}</small>}</td>)}
+              <td>{row.source}{Boolean(row.rawLabel || Object.keys(row.unknownFields ?? {}).length) && <details className="transfer-row-notes"><summary>Données du fichier</summary>{row.rawLabel && <p>Libellé : {row.rawLabel}</p>}{Object.entries(row.unknownFields ?? {}).map(([name, value]) => <p key={name}>{name} : {value}</p>)}</details>}{Boolean(row.warnings?.length) && <details className="transfer-row-notes"><summary>À vérifier</summary>{row.warnings!.map((warning, note) => <p key={note}>{warning}</p>)}</details>}</td>{fields.map((field) => <td key={field.key}><input aria-label={`${field.label}, ${row.source}`} aria-invalid={Boolean(errors[field.key])} aria-describedby={errors[field.key] ? `import-error-${index}-${field.key}` : undefined} type={field.key === "movementDate" ? "date" : "text"} placeholder={field.key === "vintage" ? "Année / 0000" : undefined} style={{ width: field.width }} value={row[field.key]} onChange={(event) => updateRow(index, field.key, event.target.value)} />{errors[field.key] && <small id={`import-error-${index}-${field.key}`} className="transfer-field-error">{errors[field.key]}</small>}</td>)}
             </tr>; })}</tbody></table></div>
           <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={importRows} disabled={!activeJobId || !picked.length || Boolean(invalid) || busy || usage?.remaining === 0}><Check size={17} /> {busy ? "Import en cours…" : `Confirmer ${picked.length} vin${picked.length > 1 ? "s" : ""}`}</button></div></>}
       </> : <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={exportData} disabled={busy || usage?.remaining === 0}><Download size={17} /> {busy ? "Préparation…" : "Télécharger le fichier Excel"}</button></div>}

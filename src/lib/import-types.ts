@@ -12,12 +12,13 @@ export type ImportRow = {
   purchasePrice: string;
   movementDate: string;
   comment: string;
+  rawLabel?: string;
   unknownFields?: Record<string, string>;
   baseComment?: string;
   warnings?: string[];
 };
 
-export type ImportField = Exclude<keyof ImportRow, "source" | "unknownFields" | "baseComment" | "warnings">;
+export type ImportField = Exclude<keyof ImportRow, "source" | "rawLabel" | "unknownFields" | "baseComment" | "warnings">;
 export type ImportAnalysis = { rows: ImportRow[]; warnings: string[] };
 
 export function importRowErrors(row: ImportRow): Partial<Record<ImportField, string>> {
