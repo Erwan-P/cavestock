@@ -29,20 +29,23 @@ const rowSchema = z.object({
     purchasePrice: row.purchasePrice || null, movementDate: row.movementDate || null, comment: row.comment || null,
   }),
 }));
-const bodySchema = z.object({ rows: z.array(rowSchema).min(1).max(500) });
+const bodySchema = z.object({ jobId: z.string().min(1).max(60), rows: z.array(rowSchema).min(1).max(500) });
 
 export async function POST(request: NextRequest) {
   if (!requestIsSameOrigin(request)) return jsonError("Requête refusée.", 403);
   const user = await getCurrentUser();
   if (!user) return jsonError("Connexion requise.", 401);
-  let rows: z.output<typeof bodySchema>["rows"];
-  try { rows = bodySchema.parse(await request.json()).rows; }
+  let input: z.output<typeof bodySchema>;
+  try { input = bodySchema.parse(await request.json()); }
   catch { return jsonError("L'aperçu contient des champs invalides. Vérifiez catégorie, région, appellation, domaine, millésime et quantité.", 400); }
+  const rows = input.rows;
 
   try {
     await serializableTransaction(async (tx) => {
       const lock = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
       if (!lock.length) throw new ImportFailure("Compte introuvable.");
+      const job = await tx.importJob.findFirst({ where: { id: input.jobId, userId: user.id, status: "READY" }, select: { id: true } });
+      if (!job) throw new ImportFailure("Cet aperçu n'est plus disponible. Rechargez la page.");
       const { start, end, limit } = quotaPeriod("IMPORT");
       const used = await tx.dataTransfer.count({ where: { userId: user.id, kind: "IMPORT", createdAt: { gte: start, lt: end } } });
       if (used >= limit) throw new ImportFailure("Vous avez atteint la limite de 3 imports ce mois-ci.", 429);
@@ -80,6 +83,9 @@ export async function POST(request: NextRequest) {
           if (wine.quantity) await tx.stockMovement.create({ data: { userId: user.id, wineId: created.id, kind: "ENTRY", quantity: wine.quantity, movementDate: wine.movementDate } });
         }
       }
+      const completed = await tx.importJob.updateMany({ where: { id: job.id, userId: user.id, status: "READY" },
+        data: { status: "IMPORTED", importedAt: new Date(), analysis: Prisma.JsonNull } });
+      if (!completed.count) throw new ImportFailure("Cet import a déjà été confirmé.");
       await tx.dataTransfer.create({ data: { userId: user.id, kind: "IMPORT" } });
     }, { timeout: 60_000, maxWait: 10_000 });
     return Response.json({ message: `${rows.length} ligne${rows.length > 1 ? "s" : ""} importée${rows.length > 1 ? "s" : ""}.`, data: await getCellarData(user.id) });

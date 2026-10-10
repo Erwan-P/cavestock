@@ -6,6 +6,7 @@ import ExcelJS from "exceljs";
 import XLSX from "xlsx";
 import { PrismaClient } from "@prisma/client";
 import { SignJWT } from "jose";
+import { parseImportFile } from "../src/lib/import-file.ts";
 
 const prisma = new PrismaClient();
 const baseUrl = process.env.CELLAR_TEST_URL || "http://localhost:3100";
@@ -16,11 +17,8 @@ async function api(path, body, json = false) {
   return fetch(`${baseUrl}${path}`, { method: "POST", headers: { Origin: baseUrl, Cookie: cookie, ...(json ? { "Content-Type": "application/json" } : {}) }, body: json ? JSON.stringify(body) : body });
 }
 async function preview(content, filename) {
-  const form = new FormData(); form.set("file", new File([content], filename));
-  const response = await api("/api/cellar/import/preview", form);
-  assert.equal(response.status, 200, await response.clone().text());
   checks++;
-  return response.json();
+  return parseImportFile(new File([content], filename));
 }
 const labels = ["Catégorie", "Région", "Appellation", "Domaine", "Millésime", "Quantité", "Prix par bouteille (€)", "Date d'achat", "Casier"];
 const values = ["Rouge", "Bordeaux", "Pomerol", "Domaine QA", "2020", "3", "15,50", "01/08/2026", "A4"];
@@ -94,13 +92,17 @@ try {
   const missing = [...values]; missing[4] = "";
   data = await preview(`${labels.join(";")}\n${missing.join(";")}`, "sans-millesime.csv");
   assert.equal(data.rows[0].vintage, "");
-  let response = await api("/api/cellar/import/commit", { rows: [data.rows[0]] }, true);
+  const job = await prisma.importJob.create({ data: { userId: user.id, fileName: "qa-import.csv", status: "READY", analysis: { rows: [data.rows[0]], warnings: [] } } });
+  let response = await api("/api/cellar/import/commit", { jobId: job.id, rows: [data.rows[0]] }, true);
   assert.equal(response.status, 400); checks++;
   assert.equal(await prisma.dataTransfer.count({ where: { userId: user.id } }), 0);
   assert.equal(await prisma.wine.count({ where: { userId: user.id } }), 0, "Tous les aperçus doivent rester sans écriture de stock.");
-  response = await api("/api/cellar/import/commit", { rows: [{ ...completeRow, vintage: "0000" }] }, true);
+  response = await api("/api/cellar/import/commit", { jobId: job.id, rows: [{ ...completeRow, vintage: "0000" }] }, true);
   assert.equal(response.status, 200, await response.clone().text()); checks++;
   const committed = (await response.json()).data;
+  assert.equal((await prisma.importJob.findUnique({ where: { id: job.id } })).status, "IMPORTED");
+  response = await api("/api/cellar/import/commit", { jobId: job.id, rows: [{ ...completeRow, vintage: "0000" }] }, true);
+  assert.equal(response.status, 409, "Une demande confirmée ne doit pas être importée deux fois."); checks++;
   assert.equal(committed.wines[0].vintage, 0); assert.equal(committed.stats.oldestVintage, null);
   assert.equal(committed.wines[0].movements[0].movementDate, "2026-08-01");
   response = await api("/api/cellar/export"); assert.equal(response.status, 200); checks++;

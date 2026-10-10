@@ -48,7 +48,25 @@ L'import accepte `.xls` (Excel BIFF), `.xlsx`, `.csv` et `.tsv` (2 Mo, 500 vins,
 
 Pour les tableaux avec des repères décroissants (par exemple 24 à 0), le compteur numérique adjacent, comme AC dans le classeur familial, est prioritaire. À défaut, les cases grisées permettent de déduire un stock seulement si les cases visibles forment une séquence cohérente de 1 à N. Les quantités indéterminées restent à compléter. Les libellés combinés sont séparés quand c'est possible, en conservant leur texte source ; aucune appellation ambiguë n'est inventée.
 
-Le choix ou le dépôt d'un fichier lance automatiquement l'analyse, sans importer les vins. L'aperçu est modifiable et n'écrit rien en base. Les champs obligatoires manquants bloquent la confirmation des lignes sélectionnées. Un millésime absent n'est jamais remplacé automatiquement ; l'utilisateur doit saisir une année ou explicitement `0000` (inconnu). Cette valeur est également disponible dans les formulaires, affichée sur quatre chiffres et exclue du calcul de la bouteille la plus ancienne. Les dates d'achat complètes sont reprises pour les mouvements ; les dates textuelles partielles restent dans les commentaires. Sans date, le mouvement prend la date d'import. L'import confirmé est atomique ; les doublons augmentent le stock existant et enregistrent une entrée. Chaque compte dispose de 3 imports par mois calendaire, heure de Paris.
+Le dépôt enregistre le fichier en base dans une demande en attente et envoie un mail à l'opérateur. Le script local `scripts/import_worker.py` récupère la demande, exécute **le même parseur** que le site, puis soumet les lignes à l'IA locale de LM Studio. L'IA vérifie la répartition des noms entre appellation, domaine et cuvée ; elle ne peut proposer qu'un terme présent dans le fichier. Une clé Brave Search facultative permet de vérifier la nature d'un terme sur le web : seul le libellé du vin est envoyé à la recherche, pas les données du compte. Si l'IA échoue, la demande passe en échec et peut être supprimée puis redéposée. Lorsque l'analyse aboutit, le site envoie un mail à l'utilisateur et affiche l'aperçu à corriger. Aucun vin n'est ajouté avant sa confirmation.
+
+L'aperçu reste modifiable. Les champs obligatoires manquants bloquent la confirmation des lignes sélectionnées. Un millésime absent n'est jamais remplacé automatiquement ; l'utilisateur doit saisir une année ou explicitement `0000` (inconnu). Cette valeur est également disponible dans les formulaires, affichée sur quatre chiffres et exclue du calcul de la bouteille la plus ancienne. Les dates d'achat complètes sont reprises pour les mouvements ; les dates textuelles partielles restent dans les commentaires. Sans date, le mouvement prend la date d'import. L'import confirmé est atomique ; les doublons augmentent le stock existant et enregistrent une entrée. Chaque compte dispose de 3 imports par mois calendaire, heure de Paris ; les demandes en attente réservent une place dans ce quota.
+
+### Lancer le traitement local
+
+Installer Python 3.11+, Node 24 et les dépendances du dépôt (`npm ci`) sur le laptop. Dans LM Studio, charger un modèle capable de répondre en JSON et activer **Local Server**. Configurer `CAVESTOCK_URL` (adresse HTTPS du site), `IMPORT_WORKER_TOKEN` (la même valeur que sur Vercel), `LM_STUDIO_MODEL` (identifiant exact affiché par le serveur), et au besoin `LM_STUDIO_URL` et `BRAVE_SEARCH_API_KEY`. Le script lit automatiquement ces valeurs dans `.env.import-worker`, fichier local ignoré par Git ; les variables déjà définies dans l'environnement priment. Lancer `python scripts/import_worker.py` pour traiter une seule demande, ou `python scripts/import_worker.py --poll 60` pour surveiller la file toutes les 60 secondes tant que le laptop est allumé. Le worker n'a pas besoin des identifiants Supabase : il échange avec le site au moyen d'un jeton dédié.
+
+Contenu du fichier local `.env.import-worker` :
+
+```text
+CAVESTOCK_URL=https://cavestock.vercel.app
+IMPORT_WORKER_TOKEN=secret-identique-a-la-variable-vercel
+LM_STUDIO_MODEL=qwen/qwen3.5-9b
+```
+
+```powershell
+python scripts/import_worker.py
+```
 
 L'export produit un classeur `.xlsx` avec un onglet par catégorie et un onglet Historique. Il est limité à 3 exports par mois calendaire, heure de Paris. Les données d'authentification ne sont jamais incluses. Le profil permet de modifier prénom et nom, et de demander le changement d'adresse e-mail après saisie du mot de passe. L'adresse actuelle reste active jusqu'à la validation de la nouvelle. La suppression définitive du compte, de ses vins, catégories et mouvements demande confirmation et mot de passe.
 

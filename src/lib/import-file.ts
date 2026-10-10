@@ -1,7 +1,6 @@
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import { fromBufferPromise } from "yauzl";
-import { displayText, normalize } from "@/lib/cellar";
 import type { ImportAnalysis, ImportField, ImportRow } from "@/lib/import-types";
 
 export type { ImportRow } from "@/lib/import-types";
@@ -11,6 +10,11 @@ type Header = { fields: Array<ImportField | null>; score: number; scale: { start
 const MAX_ROWS = 2000;
 const MAX_COLUMNS = 64;
 const MAX_XLSX_UNCOMPRESSED = 12_000_000;
+// Keep the parser independent of Prisma so the local worker runs this exact algorithm.
+function normalize(value: string) {
+  return value.trim().replace(/\s+/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+}
+function displayText(value: string) { return value.trim().replace(/\s+/g, " "); }
 
 async function checkWorkbookArchive(buffer: Buffer) {
   const zip = await fromBufferPromise(buffer, { validateEntrySizes: true, strictFileNames: true });

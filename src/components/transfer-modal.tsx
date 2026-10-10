@@ -7,6 +7,7 @@ import { importRowErrors, type ImportField, type ImportRow } from "@/lib/import-
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 type Usage = { used: number; limit: number; remaining: number; resetsAt: string };
+type ImportJob = { id: string; fileName: string; status: "PENDING" | "PROCESSING" | "READY" | "FAILED" | "IMPORTED"; error: string | null; createdAt: string };
 type Mode = "import" | "export";
 type Props = { mode: Mode; onClose: () => void; onImported: (data: CellarData) => void };
 type Editable = ImportField;
@@ -32,6 +33,8 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
   const dialogRef = useRef<HTMLElement>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [fileName, setFileName] = useState("");
+  const [jobs, setJobs] = useState<ImportJob[]>([]);
+  const [activeJobId, setActiveJobId] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [baseRows, setBaseRows] = useState<ImportRow[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -49,31 +52,76 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
     return () => { active = false; };
   }, [mode]);
 
+  useEffect(() => {
+    if (mode !== "import") return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch("/api/cellar/import/jobs", { cache: "no-store" });
+        if (response.ok && active) setJobs((await response.json() as { jobs: ImportJob[] }).jobs);
+      } catch { /* The next poll retries. */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [mode]);
+
   function updateRow(index: number, key: Editable, value: string) {
     setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row));
   }
 
-  async function preview(file: File) {
-    if (busy || usage?.remaining === 0) return;
+  const queued = jobs.filter((job) => ["PENDING", "PROCESSING", "READY"].includes(job.status)).length;
+  const canUpload = Boolean(usage && usage.remaining > queued);
+
+  async function submitFile(file: File) {
+    if (busy || !canUpload) return;
     setFileName(file.name);
     setBusy(true); setError(""); setRows([]); setBaseRows([]); setWarnings([]);
     try {
       const body = new FormData(); body.set("file", file);
-      const response = await fetch("/api/cellar/import/preview", { method: "POST", body });
+      const response = await fetch("/api/cellar/import/jobs", { method: "POST", body });
       if (!response.ok) throw new Error(await errorMessage(response));
-      const result = await response.json() as { rows: ImportRow[]; warnings: string[]; usage: Usage };
-      setWarnings(result.warnings ?? []);
-      setRows(result.rows); setBaseRows(result.rows); setMapping({}); setSelected(new Set(result.rows.map((_, index) => index))); setUsage(result.usage);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Analyse impossible."); }
+      const result = await response.json() as { jobId: string };
+      setActiveJobId(result.jobId);
+      setJobs((current) => [{ id: result.jobId, fileName: file.name, status: "PENDING", error: null, createdAt: new Date().toISOString() }, ...current]);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Envoi impossible."); }
+    finally { setBusy(false); }
+  }
+
+  async function openJob(job: ImportJob) {
+    if (busy || job.status !== "READY") return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/cellar/import/jobs/${encodeURIComponent(job.id)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      const result = await response.json() as { analysis: { rows: ImportRow[]; warnings: string[] } };
+      if (!result.analysis?.rows?.length) throw new Error("L'aperçu est indisponible.");
+      setFileName(job.fileName); setActiveJobId(job.id);
+      setWarnings(result.analysis.warnings ?? []);
+      setRows(result.analysis.rows); setBaseRows(result.analysis.rows); setMapping({});
+      setSelected(new Set(result.analysis.rows.map((_, index) => index)));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Aperçu impossible."); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteJob(job: ImportJob) {
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/cellar/import/jobs/${encodeURIComponent(job.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await errorMessage(response));
+      setJobs((current) => current.filter((item) => item.id !== job.id));
+      if (activeJobId === job.id) { setActiveJobId(""); setRows([]); setBaseRows([]); setWarnings([]); setFileName(""); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Suppression impossible."); }
     finally { setBusy(false); }
   }
 
   async function importRows() {
     const picked = rows.filter((_, index) => selected.has(index));
-    if (!picked.length || picked.some((row) => !valid(row)) || busy) return;
+    if (!activeJobId || !picked.length || picked.some((row) => !valid(row)) || busy) return;
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/cellar/import/commit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: picked }) });
+      const response = await fetch("/api/cellar/import/commit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: activeJobId, rows: picked }) });
       if (!response.ok) throw new Error(await errorMessage(response));
       const result = await response.json() as { data: CellarData; message: string };
       onImported(result.data);
@@ -121,17 +169,23 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
       <button type="button" className="cellar-dialog__close" aria-label="Fermer" onClick={onClose} disabled={busy}><X size={26} /></button>
       <h2 id="transfer-title">{mode === "import" ? "Importer mes vins" : "Exporter ma cave"}</h2>
       {(mode === "export" || rows.length > 0) && <p className="transfer-intro">{mode === "import"
-        ? "Vérifiez et corrigez l'aperçu avant de confirmer : rien n'a été enregistré pendant l'analyse."
+        ? "Vérifiez et corrigez l'aperçu avant de confirmer l'ajout à votre cave."
         : "Téléchargez un classeur Excel avec un onglet par catégorie et un onglet pour l'historique des mouvements."}</p>}
       {usage && <p className="transfer-quota">{usage.remaining} {mode === "import" ? `import${usage.remaining > 1 ? "s" : ""}` : `export${usage.remaining > 1 ? "s" : ""}`} restant{usage.remaining > 1 ? "s" : ""} ce mois-ci (limite : {usage.limit}). Réinitialisation le {new Date(usage.resetsAt).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" })}.</p>}
       {mode === "import" ? <>
-        <div className="transfer-upload" onDragOver={(event) => { event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); const selectedFile = event.dataTransfer.files[0]; if (selectedFile && !busy && usage?.remaining !== 0) void preview(selectedFile); }}>
+        <p className="transfer-hint">Déposez le fichier : son analyse sera lancée lorsqu'un opérateur sera disponible. Vous recevrez un e-mail dès que l'aperçu sera prêt. Aucun vin n'est ajouté avant votre confirmation.</p>
+        <div className="transfer-upload" onDragOver={(event) => { event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); const selectedFile = event.dataTransfer.files[0]; if (selectedFile && !busy && canUpload) void submitFile(selectedFile); }}>
           <FileSpreadsheet size={27} aria-hidden="true" />
-          <input id="transfer-file" className="transfer-file-input" type="file" accept=".xls,.xlsx,.csv,.tsv" disabled={busy || usage?.remaining === 0} onChange={(event: ChangeEvent<HTMLInputElement>) => { const selectedFile = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (selectedFile) void preview(selectedFile); }} />
+          <input id="transfer-file" className="transfer-file-input" type="file" accept=".xls,.xlsx,.csv,.tsv" disabled={busy || !canUpload} onChange={(event: ChangeEvent<HTMLInputElement>) => { const selectedFile = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (selectedFile) void submitFile(selectedFile); }} />
           <label htmlFor="transfer-file" className="transfer-file-button">Choisir un fichier</label>
           <span>.xls, .xlsx, .csv ou .tsv · 2 Mo maximum</span>
-          {fileName && <p className="transfer-filename">{busy ? "Analyse en cours : " : "Fichier : "}{fileName}</p>}
+          {fileName && <p className="transfer-filename">Fichier : {fileName}</p>}
         </div>
+        {jobs.length > 0 && <div className="transfer-jobs"><h3>Mes demandes d'import</h3><ul>{jobs.map((job) => <li key={job.id}>
+          <span><strong>{job.fileName}</strong> - {job.status === "PENDING" ? "En attente du traitement" : job.status === "PROCESSING" ? "Analyse en cours" : job.status === "READY" ? "Prêt à vérifier" : job.status === "IMPORTED" ? "Import confirmé" : "Analyse échouée : supprimez la demande, puis redéposez le fichier"}</span>
+          {job.status === "READY" && <button type="button" onClick={() => void openJob(job)} disabled={busy}>Voir l'aperçu</button>}
+          {["PENDING", "PROCESSING", "READY", "FAILED"].includes(job.status) && <button type="button" onClick={() => void deleteJob(job)} disabled={busy} aria-label={`Supprimer ${job.fileName}`}>Supprimer</button>}
+        </li>)}</ul></div>}
         {rows.length > 0 && <><div className="transfer-summary"><strong>{rows.length} ligne{rows.length > 1 ? "s" : ""} détectée{rows.length > 1 ? "s" : ""}</strong><span>{picked.length} sélectionnée{picked.length > 1 ? "s" : ""} · {invalid} à corriger</span>
           <button type="button" onClick={() => setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((_, index) => index)))}>{selected.size === rows.length ? "Tout désélectionner" : "Tout sélectionner"}</button></div>
           {warnings.length > 0 && <ul className="transfer-warnings">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
@@ -144,7 +198,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
               <td><input type="checkbox" aria-label={`Importer ${row.source}`} checked={selected.has(index)} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })} /></td>
               <td>{row.source}{Boolean(row.warnings?.length) && <details className="transfer-row-notes"><summary>À vérifier</summary>{row.warnings!.map((warning, note) => <p key={note}>{warning}</p>)}</details>}</td>{fields.map((field) => <td key={field.key}><input aria-label={`${field.label}, ${row.source}`} aria-invalid={Boolean(errors[field.key])} aria-describedby={errors[field.key] ? `import-error-${index}-${field.key}` : undefined} type={field.key === "movementDate" ? "date" : "text"} placeholder={field.key === "vintage" ? "Année / 0000" : undefined} style={{ width: field.width }} value={row[field.key]} onChange={(event) => updateRow(index, field.key, event.target.value)} />{errors[field.key] && <small id={`import-error-${index}-${field.key}`} className="transfer-field-error">{errors[field.key]}</small>}</td>)}
             </tr>; })}</tbody></table></div>
-          <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={importRows} disabled={!picked.length || Boolean(invalid) || busy || usage?.remaining === 0}><Check size={17} /> {busy ? "Import en cours…" : `Confirmer ${picked.length} vin${picked.length > 1 ? "s" : ""}`}</button></div></>}
+          <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={importRows} disabled={!activeJobId || !picked.length || Boolean(invalid) || busy || usage?.remaining === 0}><Check size={17} /> {busy ? "Import en cours…" : `Confirmer ${picked.length} vin${picked.length > 1 ? "s" : ""}`}</button></div></>}
       </> : <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={exportData} disabled={busy || usage?.remaining === 0}><Download size={17} /> {busy ? "Préparation…" : "Télécharger le fichier Excel"}</button></div>}
       {error && <p className="cellar-form-error" role="alert">{error}</p>}
     </section>

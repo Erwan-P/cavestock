@@ -9,3 +9,5 @@ tmp/
 backups/
 .vercel/
 *.log
+__pycache__/
+*.pyc

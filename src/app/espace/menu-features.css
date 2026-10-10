@@ -15,6 +15,12 @@
 .transfer-file-input:focus-visible + .transfer-file-button { outline: 2px solid #a93494; outline-offset: 3px; }
 .transfer-file-input:disabled + .transfer-file-button { opacity: .55; cursor: not-allowed; }
 .transfer-filename { max-width: 100%; margin: 0; overflow-wrap: anywhere; color: #4d384a; font-size: 12px; }
+.transfer-jobs { margin: 0 0 20px; padding: 14px; border: 1px solid #e2cde0; border-radius: 10px; background: #fbf5fa; }
+.transfer-jobs h3 { margin: 0 0 10px; color: #542348; font-size: 14px; }
+.transfer-jobs ul { margin: 0; padding: 0; list-style: none; }
+.transfer-jobs li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 0; border-top: 1px solid #eadce7; font-size: 12px; }
+.transfer-jobs li span { flex: 1 1 240px; overflow-wrap: anywhere; }
+.transfer-jobs button { border: 0; background: transparent; color: #8d267a; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .transfer-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #ddd2dc; font-size: 13px; }
 .transfer-summary span { color: #655a65; }
 .transfer-summary button { margin-left: auto; border: 0; background: transparent; color: #8d267a; font-weight: 750; text-decoration: underline; }

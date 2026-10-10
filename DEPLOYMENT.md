@@ -59,13 +59,18 @@ Ne pas utiliser `prisma migrate reset` sur les données réelles. Ne pas recopie
 | BREVO_SENDER_EMAIL | cavestock-contact@googlegroups.com, déjà vérifiée chez Brevo |
 | CAVESTOCK_CONTACT_EMAIL | cavestock-contact@googlegroups.com |
 | CAVESTOCK_SITE_URL | URL publique exacte en HTTPS, sans chemin |
+| IMPORT_WORKER_TOKEN | Secret aléatoire d'au moins 32 caractères, identique sur le laptop |
+| CAVESTOCK_IMPORT_ADMIN_EMAIL | Adresse qui reçoit les dépôts de fichiers à traiter |
 | TRUSTED_CLIENT_IP_HEADER | x-forwarded-for, pour un déploiement directement derrière Vercel |
 
 Ne pas copier MYSQL_SOURCE_URL, MIGRATION_TARGET_URL ou CAVESTOCK_MAIL_TEST_URL sur Vercel. Ne préfixer aucun secret par NEXT_PUBLIC_.
 
+Pour l'import différé, ouvrir **Vercel > projet CaveStock > Settings > Environment Variables**, ajouter `IMPORT_WORKER_TOKEN` et `CAVESTOCK_IMPORT_ADMIN_EMAIL` à l'environnement **Production**, puis enregistrer. Générer le jeton sur le laptop avec `python -c "import secrets; print(secrets.token_urlsafe(48))"` et conserver exactement la même valeur dans l'environnement du script local ; ne jamais l'ajouter au dépôt. L'adresse admin doit pouvoir recevoir les messages envoyés par Brevo. Après toute modification des variables Vercel, redéployer le site. Le laptop n'a pas besoin de `DATABASE_URL` Supabase ; son seul accès au site est ce jeton.
+
 4. Choisir le nom de projet et vérifier l'URL proposée par Vercel. Utiliser cette URL HTTPS dans `CAVESTOCK_SITE_URL`. Un domaine personnel n'est pas requis ; une URL `.vercel.app` convient.
 5. Déployer. Si l'URL n'était pas connue à l'étape précédente, la renseigner dans Settings > Environment Variables puis faire **Redeploy**. Toute modification des variables exige un nouveau déploiement.
 6. Les migrations sont une étape séparée : le build ne modifie pas la base. À chaque changement de schéma, appliquer `prisma migrate deploy` sur la bonne cible avant l'application qui l'exige.
+   La migration `20261010000000_async_import_jobs` doit donc être appliquée avant la publication du nouveau parcours d'import.
 7. Vérifier la région des fonctions et la rapprocher de la base si le plan le permet.
 
 Références : [Node.js 24 sur Vercel](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [en-têtes de confiance](https://vercel.com/docs/headers/request-headers).
