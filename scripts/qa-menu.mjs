@@ -4,6 +4,7 @@ import { hash } from "bcryptjs";
 import ExcelJS from "exceljs";
 import { PrismaClient } from "@prisma/client";
 import { SignJWT } from "jose";
+import { parseImportFile } from "../src/lib/import-file.ts";
 
 const prisma = new PrismaClient();
 const baseUrl = process.env.CELLAR_TEST_URL || "http://localhost:3100";
@@ -12,6 +13,17 @@ let fixtureId;
 
 async function api(path, cookie, method = "GET", body, headers = {}) {
   return fetch(`${baseUrl}${path}`, { method, headers: { Origin: baseUrl, Cookie: cookie, ...headers }, body, redirect: "manual" });
+}
+
+async function commitRows(cookie, rows) {
+  // Fixture for the deferred worker result; these checks never call an AI service.
+  const job = await prisma.importJob.create({ data: {
+    userId: fixtureId, fileName: "qa-menu.csv", status: "READY", analysis: { rows, warnings: [] },
+  } });
+  const response = await api("/api/cellar/import/commit", cookie, "POST",
+    JSON.stringify({ jobId: job.id, rows }), { "Content-Type": "application/json" });
+  if (!response.ok) await prisma.importJob.deleteMany({ where: { id: job.id, status: "READY" } });
+  return response;
 }
 
 const row = (overrides = {}) => ({ source: "Feuil1 · ligne 2", category: "Vins Rouge", region: "Bordeaux",
@@ -34,15 +46,12 @@ try {
   assert.equal(usage.imports.resetsAt, usage.exports.resetsAt, "Imports et exports doivent partager la même échéance mensuelle.");
 
   const csv = "Catégorie;Région;Appellation;Domaine;Millésime;Quantité;Prix;Casier\nVins Rouge;Bordeaux;Pomerol;Domaine QA Menu;2020;3;15,50;A4";
-  const form = new FormData(); form.set("file", new File([csv], "migration.csv", { type: "text/csv" }));
-  response = await api("/api/cellar/import/preview", cookie, "POST", form);
-  assert.equal(response.status, 200, await response.clone().text());
-  let preview = await response.json();
+  let preview = await parseImportFile(new File([csv], "migration.csv", { type: "text/csv" }));
   assert.equal(preview.rows[0].comment, "");
   assert.equal(preview.rows[0].unknownFields.Casier, "A4");
   assert.equal(await prisma.wine.count({ where: { userId: user.id } }), 0, "L'aperçu ne doit rien écrire.");
 
-  response = await api("/api/cellar/import/commit", cookie, "POST", JSON.stringify({ rows: [row({ region: "" })] }), { "Content-Type": "application/json" });
+  response = await commitRows(cookie, [row({ region: "" })]);
   assert.equal(response.status, 400);
   assert.equal(await prisma.dataTransfer.count({ where: { userId: user.id } }), 0);
   for (const [email, candidatePassword] of [["pas-un-mail", password], ["valide@example.fr", "court"]]) {
@@ -50,21 +59,18 @@ try {
     assert.equal(response.status, 400);
     assert.match((await response.json()).error, /Vérifiez les champs/);
   }
-  response = await api("/api/cellar/import/commit", cookie, "POST", JSON.stringify({ rows: [preview.rows[0]] }), { "Content-Type": "application/json" });
+  response = await commitRows(cookie, [preview.rows[0]]);
   assert.equal(response.status, 200, await response.clone().text());
   let data = (await response.json()).data;
   assert.equal(data.wines.length, 1);
   assert.equal(data.wines[0].quantity, 3);
-  assert.equal(data.wines[0].comment, "");
+  assert.equal(data.wines[0].comment, null);
   assert.equal(data.wines[0].movements[0].kind, "ENTRY");
 
   const vertical = new ExcelJS.Workbook(); const sheet = vertical.addWorksheet("Champagnes");
   sheet.addRow(["Région", "Champagne"]); sheet.addRow(["Appellation", "Champagne"]); sheet.addRow(["Domaine", "Maison QA"]);
   sheet.addRow(["Millésime", "2018"]); sheet.addRow(["Quantité", "2"]); sheet.addRow(["Casier", "B7"]);
-  const verticalForm = new FormData(); verticalForm.set("file", new File([Buffer.from(await vertical.xlsx.writeBuffer())], "vertical.xlsx"));
-  response = await api("/api/cellar/import/preview", cookie, "POST", verticalForm);
-  assert.equal(response.status, 200, await response.clone().text());
-  preview = await response.json();
+  preview = await parseImportFile(new File([Buffer.from(await vertical.xlsx.writeBuffer())], "vertical.xlsx"));
   assert.equal(preview.rows[0].category, "Champagnes");
   assert.equal(preview.rows[0].comment, "");
 
@@ -72,13 +78,9 @@ try {
   const oversizedSheet = oversized.addWorksheet("Vins Rouge");
   oversizedSheet.addRow(["Région", "Domaine"]);
   oversizedSheet.addRow(["Bordeaux", "A".repeat(12_500_000)]);
-  const oversizedForm = new FormData();
-  oversizedForm.set("file", new File([Buffer.from(await oversized.xlsx.writeBuffer())], "compact.xlsx"));
-  response = await api("/api/cellar/import/preview", cookie, "POST", oversizedForm);
-  assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /volumineux après décompression/);
+  await assert.rejects(parseImportFile(new File([Buffer.from(await oversized.xlsx.writeBuffer())], "compact.xlsx")), /volumineux après décompression/);
 
-  response = await api("/api/cellar/import/commit", cookie, "POST", JSON.stringify({ rows: [row({ quantity: "2", comment: "Second lot" })] }), { "Content-Type": "application/json" });
+  response = await commitRows(cookie, [row({ quantity: "2", comment: "Second lot" })]);
   assert.equal(response.status, 200, await response.clone().text());
   data = (await response.json()).data;
   assert.equal(data.wines.length, 1, "Le doublon sans cuvée doit fusionner.");
@@ -91,21 +93,16 @@ try {
   const exported = new ExcelJS.Workbook(); await exported.xlsx.load(Buffer.from(await response.arrayBuffer()));
   assert.equal(exported.getWorksheet("Vins Rouge").getRow(2).getCell(5).value, 5);
   assert.equal(exported.getWorksheet("Historique").rowCount, 3);
-  const exportedForm = new FormData(); exportedForm.set("file", new File([Buffer.from(await exported.xlsx.writeBuffer())], "reimport.xlsx"));
-  response = await api("/api/cellar/import/preview", cookie, "POST", exportedForm);
-  assert.equal(response.status, 200, await response.clone().text());
-  preview = await response.json();
+  preview = await parseImportFile(new File([Buffer.from(await exported.xlsx.writeBuffer())], "reimport.xlsx"));
   assert.equal(preview.rows.length, 1, "L'onglet Historique ne doit pas être réimporté comme des vins.");
 
   response = await api("/api/cellar/export", cookie, "POST"); assert.equal(response.status, 200);
   response = await api("/api/cellar/export", cookie, "POST"); assert.equal(response.status, 200);
   response = await api("/api/cellar/export", cookie, "POST"); assert.equal(response.status, 429);
-  response = await api("/api/cellar/import/commit", cookie, "POST", JSON.stringify({ rows: [row({ domaine: "QA troisième import", quantity: "0" })] }), { "Content-Type": "application/json" });
+  response = await commitRows(cookie, [row({ domaine: "QA troisième import", quantity: "0" })]);
   assert.equal(response.status, 200, await response.clone().text());
-  response = await api("/api/cellar/import/commit", cookie, "POST", JSON.stringify({ rows: [row()] }), { "Content-Type": "application/json" });
+  response = await commitRows(cookie, [row()]);
   assert.equal(response.status, 429, await response.clone().text());
-  response = await api("/api/cellar/import/preview", cookie, "POST", form);
-  assert.equal(response.status, 429);
   response = await api("/api/cellar/transfer-usage", cookie);
   usage = await response.json();
   assert.equal(usage.imports.remaining, 0);

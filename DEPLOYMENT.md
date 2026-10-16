@@ -71,6 +71,7 @@ Pour l'import différé, ouvrir **Vercel > projet CaveStock > Settings > Environ
 5. Déployer. Si l'URL n'était pas connue à l'étape précédente, la renseigner dans Settings > Environment Variables puis faire **Redeploy**. Toute modification des variables exige un nouveau déploiement.
 6. Les migrations sont une étape séparée : le build ne modifie pas la base. À chaque changement de schéma, appliquer `prisma migrate deploy` sur la bonne cible avant l'application qui l'exige.
    La migration `20261010000000_async_import_jobs` doit donc être appliquée avant la publication du nouveau parcours d'import.
+   La migration `20261016000000_complete_private_tables` protège également les imports et les métadonnées Prisma sur les nouvelles bases, et retire les droits inutiles des rôles publics Supabase.
 7. Vérifier la région des fonctions et la rapprocher de la base si le plan le permet.
 
 Références : [Node.js 24 sur Vercel](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [en-têtes de confiance](https://vercel.com/docs/headers/request-headers).

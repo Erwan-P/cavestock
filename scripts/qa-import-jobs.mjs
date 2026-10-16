@@ -12,7 +12,9 @@ const mails = [];
 const mailServer = createServer(async (request, response) => {
   let body = "";
   for await (const chunk of request) body += chunk;
-  mails.push(JSON.parse(body));
+  const mail = JSON.parse(body);
+  assert.ok(mail.to.every(recipient => recipient.email.endsWith("@example.invalid")), "Only fixture recipients may use this transport.");
+  mails.push(mail);
   response.writeHead(201, { "Content-Type": "application/json" });
   response.end('{"messageId":"qa"}');
 });

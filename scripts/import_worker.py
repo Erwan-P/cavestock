@@ -87,7 +87,7 @@ def form_request(url: str, values: dict[str, str], timeout: int = 60) -> dict:
 def credential_path() -> Path:
     base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")
     folder = base / "CaveStock" / "import-worker"
-    folder.mkdir(parents=True, exist_ok=True)
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     return folder / "chatgpt-auth.dat"
 
 
@@ -130,9 +130,16 @@ def _dpapi(data: bytes, *, protect: bool) -> bytes:
 def save_credentials(credentials: dict) -> None:
     path = credential_path()
     data = json.dumps(credentials, ensure_ascii=False).encode("utf-8")
-    path.write_bytes(_dpapi(data, protect=True))
-    if os.name != "nt":
-        path.chmod(0o600)
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(_dpapi(data, protect=True))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def load_credentials() -> dict:
@@ -487,7 +494,9 @@ def main() -> int:
     model = os.environ.get("CHATGPT_MODEL", "").strip()
     if not site or len(worker_token) < 32:
         parser.error("Renseignez CAVESTOCK_URL et IMPORT_WORKER_TOKEN (32 caractères min.).")
-    if not site.startswith("https://") and not site.startswith("http://localhost") and not site.startswith("http://127.0.0.1"):
+    target = urllib.parse.urlsplit(site)
+    local_http = target.scheme == "http" and target.hostname in {"localhost", "127.0.0.1", "::1"}
+    if not target.hostname or (target.scheme != "https" and not local_http) or target.username or target.password or target.query or target.fragment:
         parser.error("CAVESTOCK_URL doit utiliser HTTPS hors localhost.")
     if not credential_path().exists():
         parser.error("Connectez d'abord ChatGPT avec : python scripts/import_worker.py --chatgpt-login")

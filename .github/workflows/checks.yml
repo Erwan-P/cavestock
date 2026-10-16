@@ -37,6 +37,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: python scripts/qa-import-worker.py
       - run: npm run db:deploy
       - run: npm run build
       - run: npm run test:password -- --regression

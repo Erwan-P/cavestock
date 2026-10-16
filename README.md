@@ -2,6 +2,14 @@
 
 Vitrine publique, connexion et espace personnel de gestion de cave.
 
+## Droits de réutilisation
+
+Le code est publié pour consultation et étude, sous la [licence CaveStock](LICENSE).
+Il ne s'agit pas d'une licence open source : reprendre, déployer ou republier le
+site, même modifié et même gratuitement, nécessite l'accord écrit préalable de
+l'auteur. Les fonctions de GitHub, notamment les forks, restent soumises aux
+conditions de GitHub. Les dépendances tierces conservent leurs propres licences.
+
 ## Démarrage local
 
 1. Utiliser Node.js 24 et installer les dépendances avec `npm ci`.

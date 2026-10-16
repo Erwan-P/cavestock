@@ -11,3 +11,12 @@ backups/
 *.log
 __pycache__/
 *.pyc
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.sql.gz
+*.bak
+*.lnk
+chatgpt-auth.dat

@@ -25,6 +25,8 @@ process.env.CAVESTOCK_MAIL_TEST_URL = `http://127.0.0.1:${mailServer.address().p
 process.env.BREVO_API_KEY = "local-test-no-real-key";
 process.env.BREVO_SENDER_EMAIL = "test@example.invalid";
 process.env.CAVESTOCK_CONTACT_EMAIL = "contact@example.invalid";
+process.env.CAVESTOCK_IMPORT_ADMIN_EMAIL = "operator@example.invalid";
+process.env.IMPORT_WORKER_TOKEN = randomBytes(32).toString("hex");
 process.env.AUTH_SECRET = randomBytes(48).toString("hex");
 process.env.TRUSTED_CLIENT_IP_HEADER = "";
 process.env.CELLAR_TEST_URL = baseUrl;
@@ -155,17 +157,34 @@ try {
   const contactState = await fetch(`${baseUrl}/api/contact`, { headers: { cookie: profileLogin.cookie } });
   assert.ok((await contactState.json()).retryAfterSeconds > 0);
   checks += 5;
+
+  const limitedUser = await fixture();
+  const limitedLogin = await post("/api/auth/login", { email: limitedUser.email, password: oldPassword });
+  assert.equal(limitedLogin.status, 200);
+  const attemptEmailChange = password => fetch(`${baseUrl}/api/profile`, {
+    method: "PATCH", headers: { "content-type": "application/json", origin: baseUrl, cookie: limitedLogin.cookie },
+    body: JSON.stringify({ firstName: "QA", lastName: "Password", email: `${randomUUID()}@example.invalid`, password }),
+  });
+  for (let attempt = 0; attempt < 5; attempt++) assert.equal((await attemptEmailChange("incorrect")).status, 403);
+  assert.equal((await attemptEmailChange(oldPassword)).status, 429, "Password verification must be rate limited before comparing another password.");
+  assert.equal((await prisma.user.findUnique({ where: { id: limitedUser.id } })).pendingEmail, null);
+  checks += 8;
   console.log(`Password reset QA: ${checks} checks passed; emails captured locally, none sent.`);
 
   if (process.argv.includes("--regression")) {
-    for (const name of ["qa-cellar", "qa-menu", "qa-import", "qa-email"]) {
-      await new Promise((resolve, reject) => {
+    for (const name of ["qa-cellar", "qa-menu", "qa-import", "qa-email", "qa-import-jobs"]) {
+      const previousMailUrl = process.env.CAVESTOCK_MAIL_TEST_URL;
+      if (name === "qa-import-jobs") process.env.CAVESTOCK_MAIL_TEST_URL = "http://127.0.0.1:3102";
+      try { await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [`scripts/${name}.mjs`], { env: process.env, stdio: "inherit", windowsHide: true });
         child.on("error", reject);
         child.on("exit", code => code === 0 ? resolve() : reject(new Error(`${name} failed: ${code}`)));
-      });
+      }); } finally { process.env.CAVESTOCK_MAIL_TEST_URL = previousMailUrl; }
     }
   }
+} catch (error) {
+  console.error("Password reset QA failed:", error);
+  process.exitCode = 1;
 } finally {
   for (const id of users) await prisma.user.deleteMany({ where: { id } });
   await prisma.$disconnect();
@@ -175,4 +194,4 @@ try {
   mailServer.closeAllConnections(); await new Promise(resolve => mailServer.close(resolve));
 }
 // Le serveur de développement garde des watchers internes ; les fixtures et sockets sont déjà fermées.
-process.exit(0);
+process.exit(process.exitCode ?? 0);

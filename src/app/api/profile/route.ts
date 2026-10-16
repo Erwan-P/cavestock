@@ -12,9 +12,9 @@ const nameSchema = z.object({
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
   email: z.string().trim().max(191).regex(/^[^\s@.]+(?:\.[^\s@.]+)*@[^\s@.]+(?:\.[^\s@.]+)+$/).transform((value) => value.toLowerCase()).optional(),
-  password: z.string().optional(),
+  password: z.string().max(72).optional(),
 });
-const deleteSchema = z.object({ password: z.string().min(1), confirmation: z.literal("SUPPRIMER") });
+const deleteSchema = z.object({ password: z.string().min(1).max(72), confirmation: z.literal("SUPPRIMER") });
 const EMAIL_COOLDOWN_SECONDS = 60;
 
 export async function GET() {
@@ -36,6 +36,7 @@ export async function PATCH(request: NextRequest) {
     if (nextEmail !== user.email) {
       if (!hasMailConfig()) return jsonError("Le changement d'adresse e-mail est momentanément indisponible.", 503);
       const origin = siteUrl(new URL(request.url).origin);
+      if (!await consumeRateLimit("change-email-password", user.id, 5, 15)) return jsonError("Trop de tentatives. Réessayez plus tard.", 429);
       const record = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
       if (!password || !record || !await compare(password, record.passwordHash)) return jsonError("Mot de passe requis pour changer l'adresse e-mail.", 403);
       const taken = await prisma.user.findFirst({ where: { id: { not: user.id }, OR: [{ email: nextEmail }, { pendingEmail: nextEmail }] }, select: { id: true } });
