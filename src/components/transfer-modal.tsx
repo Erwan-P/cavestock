@@ -156,7 +156,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
         : "Téléchargez un classeur Excel avec un onglet par catégorie et un onglet pour l'historique des mouvements."}</p>}
       {usage && <p className="transfer-quota">{usage.remaining} {mode === "import" ? `import${usage.remaining > 1 ? "s" : ""}` : `export${usage.remaining > 1 ? "s" : ""}`} restant{usage.remaining > 1 ? "s" : ""} ce mois-ci (limite : {usage.limit}). Réinitialisation le {new Date(usage.resetsAt).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" })}.</p>}
       {mode === "import" ? <>
-        <p className="transfer-hint">Déposez le fichier : son analyse sera lancée lorsqu'un opérateur sera disponible. Vous recevrez un e-mail dès que l'aperçu sera prêt. Aucun vin n'est ajouté avant votre confirmation.</p>
+        <p className="transfer-hint">Déposez le fichier : il sera transmis à ChatGPT (OpenAI) pour préparer l'aperçu dès qu'un opérateur sera disponible. Vous recevrez un e-mail quand il sera prêt. Aucun vin n'est ajouté avant votre confirmation.</p>
         <div className="transfer-upload" onDragOver={(event) => { event.preventDefault(); }} onDrop={(event) => { event.preventDefault(); const selectedFile = event.dataTransfer.files[0]; if (selectedFile && !busy && canUpload) void submitFile(selectedFile); }}>
           <FileSpreadsheet size={27} aria-hidden="true" />
           <input id="transfer-file" className="transfer-file-input" type="file" accept=".xls,.xlsx,.csv,.tsv" disabled={busy || !canUpload} onChange={(event: ChangeEvent<HTMLInputElement>) => { const selectedFile = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (selectedFile) void submitFile(selectedFile); }} />
