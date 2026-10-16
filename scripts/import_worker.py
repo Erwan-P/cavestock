@@ -363,7 +363,7 @@ def chatgpt_response(access_token: str, model: str, file_name: str, file_bytes: 
         "model": model,
         "instructions": schema,
         "input": [{"role": "user", "content": [
-            {"type": "input_text", "text": f"Analyse le fichier {file_name!r} et prépare son import CaveStock."},
+            {"type": "input_text", "text": f"Analyse le fichier {file_name!r} et renvoie uniquement l'objet JSON d'import CaveStock décrit dans les instructions."},
             {"type": "input_file", "filename": Path(file_name).name, "file_data": data_url},
         ]}],
         "text": {"format": {"type": "json_object"}},

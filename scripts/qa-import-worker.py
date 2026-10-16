@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -13,6 +14,22 @@ row = {field: "" for field in ["category", "region", "appellation", "domaine", "
 row["source"] = "Feuil1 - ligne 2"
 valid = {"rows": [row], "warnings": []}
 worker.validate_analysis(valid)
+
+# JSON mode checks the input messages, so instructions alone are insufficient.
+def fake_responses(request, **_kwargs):
+    payload = json.loads(request.data)
+    assert payload["text"]["format"]["type"] == "json_object"
+    assert payload["model"] == "gpt-6-luna"
+    content = payload["input"][0]["content"]
+    assert any(item["type"] == "input_text" and "json" in item["text"].lower() for item in content)
+    assert content[1]["type"] == "input_file"
+    assert content[1]["filename"] == "inventaire.xls"
+    event = {"type": "response.output_text.delta", "delta": json.dumps(valid)}
+    return io.BytesIO(("data: " + json.dumps(event) + "\n\ndata: [DONE]\n\n").encode())
+
+with patch.object(worker.urllib.request, "urlopen", side_effect=fake_responses) as responses:
+    assert worker.chatgpt_response("synthetic-token", "gpt-6-luna", "inventaire.xls", b"synthetic-file") == valid
+    assert responses.call_count == 1
 for malformed in [{"rows": [], "warnings": []}, {"rows": [row] * 501, "warnings": []}, {"rows": [dict(row, quantity=2)], "warnings": []}, {"rows": [dict(row, unknownFields={"bad": 1})], "warnings": []}]:
     try:
         worker.validate_analysis(malformed)
