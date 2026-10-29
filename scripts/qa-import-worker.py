@@ -169,13 +169,30 @@ for forged in [{"quantity": "999"}, {"vintage": "2025"}, {"comment": "changed"}]
     except ValueError:
         pass
 forged_source = dict(confirmed, source_urls=["https://invented.example/wine"])
-answers = iter([proposal, evidence, forged_source])
-unchanged = copy.deepcopy(identity_row)
-try:
-    review_identities([unchanged], lambda *a, **k: copy.deepcopy(next(answers)), log=lambda _: None)
-    raise AssertionError("A fabricated citation was accepted")
-except ValueError:
-    assert unchanged["appellation"] == identity_row["appellation"]
+# One bad citation is repaired without repeating web research.
+answers = iter([proposal, evidence, forged_source, confirmed])
+repaired = copy.deepcopy(identity_row)
+assert review_identities([repaired], lambda *a, **k: copy.deepcopy(next(answers)), log=lambda _: None) == []
+assert repaired["classification"]["status"] == "web"
+
+# A persistent failure between valid references preserves both and continues.
+three = [dict(identity_row, rawLabel=f"Wine {i}") for i in range(3)]
+three_proposals = {"identities": [dict(proposal["identities"][0], id=str(i)) for i in range(3)]}
+for invalid in [forged_source, dict(confirmed, changes={"quantity": "999"}),
+                RuntimeError("normalization unavailable"), dict(confirmed, source_urls=[])]:
+    answers = iter([three_proposals, evidence, confirmed, evidence, invalid, invalid, evidence, confirmed])
+    def resilient_ask(*args, **kwargs):
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return copy.deepcopy(answer)
+    tested = copy.deepcopy(three)
+    notes = review_identities(tested, resilient_ask, log=lambda _: None)
+    assert notes and [r["classification"]["status"] for r in tested] == ["web", "uncertain", "web"]
+    assert tested[1]["appellation"] == identity_row["appellation"]
+    assert all(tested[i][key] == three[i][key] for i in range(3) for key in protected)
+    worker.validate_analysis({"rows": tested, "warnings": notes})
+
 # No application search cap: every pending unique reference is researched.
 many = [dict(identity_row, rawLabel=f"Wine {i}") for i in range(101)]
 web_calls = []
