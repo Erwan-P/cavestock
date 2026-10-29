@@ -16,9 +16,15 @@ export type ImportRow = {
   unknownFields?: Record<string, string>;
   baseComment?: string;
   warnings?: string[];
+  classification?: {
+    status: "file" | "knowledge" | "web" | "uncertain";
+    reason: string;
+    changes: Array<{ field: "category" | "region" | "appellation" | "domaine" | "cuvee"; before: string; value: string; origin: "knowledge" | "web" }>;
+    sources: Array<{ url: string; title: string }>;
+  };
 };
 
-export type ImportField = Exclude<keyof ImportRow, "source" | "rawLabel" | "unknownFields" | "baseComment" | "warnings">;
+export type ImportField = Exclude<keyof ImportRow, "source" | "rawLabel" | "unknownFields" | "baseComment" | "warnings" | "classification">;
 export type ImportAnalysis = { rows: ImportRow[]; warnings: string[] };
 
 export function importRowErrors(row: ImportRow): Partial<Record<ImportField, string>> {

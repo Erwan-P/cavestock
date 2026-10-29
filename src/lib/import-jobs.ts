@@ -17,6 +17,21 @@ const row = z.object({
   warnings: z.array(z.string().max(300)).max(20).optional(),
   unknownFields: z.record(z.string().max(100), z.string().max(500)).optional(),
   baseComment: z.string().max(2000).optional(),
+  classification: z.object({
+    status: z.enum(["file", "knowledge", "web", "uncertain"]),
+    reason: z.string().max(500),
+    changes: z.array(z.object({
+      field: z.enum(["category", "region", "appellation", "domaine", "cuvee"]),
+      before: z.string().max(150), value: z.string().max(150), origin: z.enum(["knowledge", "web"]),
+    })).max(5),
+    sources: z.array(z.object({
+      url: z.string().max(2048).url().refine((value) => {
+        const url = new URL(value);
+        return ["http:", "https:"].includes(url.protocol) && Boolean(url.hostname) && !url.username && !url.password;
+      }),
+      title: z.string().max(200),
+    })).max(8),
+  }).optional(),
 });
 export const analysisSchema = z.object({
   rows: z.array(row).min(1).max(500),

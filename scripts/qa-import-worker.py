@@ -1,4 +1,5 @@
 import contextlib
+import copy
 import importlib.util
 import io
 import json
@@ -6,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
+from import_identity import review_identities
 
 spec = importlib.util.spec_from_file_location("worker", "scripts/import_worker.py")
 worker = importlib.util.module_from_spec(spec)
@@ -84,6 +86,63 @@ with patch.object(worker, "response_json", return_value={"regions": {
 transport = worker.read_workbook("fixture.csv", "Nom;Quantité\nVin de test;2\n".encode())
 assert len(transport["sheets"][0]["rows"]) == 2
 assert transport["sheets"][0]["rows"][1]["cells"]["A"] == "Vin de test"
+
+# Hosted search runs outside JSON mode, retaining only URLs observed in tool events.
+events = [
+    {"type": "response.output_item.done", "item": {"type": "web_search_call", "action": {"sources": [
+        {"url": "https://producer.example/wine", "title": "Producer"}, {"url": "javascript:alert(1)"}]}}},
+    {"type": "response.output_text.delta", "delta": "Research with a citation, not JSON"},
+]
+def fake_web(request, **_kwargs):
+    payload = json.loads(request.data)
+    assert "text" not in payload and payload["tools"] == [{"type": "web_search"}]
+    return io.BytesIO("".join("data: " + json.dumps(event) + "\n\n" for event in events).encode())
+with patch.object(worker.urllib.request, "urlopen", side_effect=fake_web):
+    searched = worker.response_json("synthetic", "gpt-6-luna", "Research", "Public identity", web_search=True)
+    assert searched["_web_used"] and len(searched["_web_sources"]) == 1
+    assert "research_text" in searched
+
+identity_row = dict(row, rawLabel="Château Exemple", domaine="Château Exemple", quantity="2", vintage="2020",
+                    purchasePrice="19.90", movementDate="2026-01-01", comment="PRIVATE-COMMENT")
+protected = ("source", "rawLabel", "quantity", "vintage", "purchasePrice", "movementDate", "comment")
+proposal = {"identities": [{"id": "0", "changes": {"appellation": "Appellation exacte"},
+    "needs_web": True, "reason": "Producteur à confirmer"}]}
+evidence = {"_web_used": True, "_web_sources": [{"url": "https://producer.example/wine", "title": "Producer"}], "research_text": "Exact wine"}
+confirmed = {"matched": True, "changes": {"appellation": "Appellation exacte"}, "reason": "Fiche technique",
+             "source_urls": ["https://producer.example/wine"]}
+rows = [copy.deepcopy(identity_row), dict(identity_row, source="Autre ligne", quantity="7")]
+before = copy.deepcopy(rows)
+answers = iter([proposal, evidence, confirmed])
+calls = []
+def ask_identity(instructions, message, **kwargs):
+    calls.append(kwargs)
+    assert all(secret not in message for secret in ["PRIVATE-COMMENT", "19.90", "2026-01-01", "Autre ligne"])
+    return copy.deepcopy(next(answers))
+assert review_identities(rows, ask_identity, web_limit=1, log=lambda _: None) == []
+assert len(calls) == 3 and calls[1]["web_search"] is True, "Duplicate identities must share one research request."
+assert all(row["classification"]["status"] == "web" for row in rows)
+assert all(before[i][key] == result[key] for i, result in enumerate(rows) for key in protected)
+worker.validate_analysis({"rows": rows, "warnings": []})
+
+for forged in [{"quantity": "999"}, {"vintage": "2025"}, {"comment": "changed"}]:
+    bad = {"identities": [{"id": "0", "changes": forged, "needs_web": False, "reason": "invalid"}]}
+    try:
+        review_identities([copy.deepcopy(identity_row)], lambda *a, **k: bad, log=lambda _: None)
+        raise AssertionError("A protected field was accepted")
+    except ValueError:
+        pass
+forged_source = dict(confirmed, source_urls=["https://invented.example/wine"])
+answers = iter([proposal, evidence, forged_source])
+unchanged = copy.deepcopy(identity_row)
+try:
+    review_identities([unchanged], lambda *a, **k: copy.deepcopy(next(answers)), log=lambda _: None)
+    raise AssertionError("A fabricated citation was accepted")
+except ValueError:
+    assert unchanged["appellation"] == identity_row["appellation"]
+answers = iter([proposal])
+limited = [copy.deepcopy(identity_row)]
+assert review_identities(limited, lambda *a, **k: copy.deepcopy(next(answers)), web_limit=0, log=lambda _: None)
+assert limited[0]["classification"]["status"] == "uncertain" and limited[0]["appellation"] == ""
 for malformed in [{"rows": [], "warnings": []}, {"rows": [row] * 501, "warnings": []}, {"rows": [dict(row, quantity=2)], "warnings": []}, {"rows": [dict(row, unknownFields={"bad": 1})], "warnings": []}]:
     try:
         worker.validate_analysis(malformed)

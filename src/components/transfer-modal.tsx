@@ -30,6 +30,23 @@ function valid(row: ImportRow) {
   return Object.keys(importRowErrors(row)).length === 0;
 }
 
+function IdentificationNotes({ row }: { row: ImportRow }) {
+  const identification = row.classification;
+  if (!identification || identification.status === "file") return null;
+  const title = identification.status === "uncertain" ? "Identification à vérifier"
+    : identification.status === "web" ? "Identification et sources" : "Propositions de l'IA";
+  return <div className="transfer-row-notes">
+    <details><summary>{title}</summary><p>{identification.reason}</p>
+      {identification.changes.map((change) => <p key={change.field}>
+        {fields.find((field) => field.key === change.field)?.label} : {change.value || "à compléter"}
+        {change.before && <> (avant : {change.before})</>}
+        {row[change.field] !== change.value && <> - valeur modifiée dans l&apos;aperçu</>}
+      </p>)}
+    </details>
+    {identification.sources.map((source) => <p key={source.url}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title || "Consulter la source"}</a></p>)}
+  </div>;
+}
+
 export function TransferModal({ mode, onClose, onImported }: Props) {
   const dialogRef = useRef<HTMLElement>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -176,7 +193,7 @@ export function TransferModal({ mode, onClose, onImported }: Props) {
           <div className="transfer-table-scroll"><table className="transfer-table"><thead><tr><th scope="col">Importer</th><th scope="col">Source</th>{fields.map((field) => <th scope="col" key={field.key}>{field.label}</th>)}</tr></thead><tbody>
             {rows.map((row, index) => { const errors = importRowErrors(row); return <tr key={`${row.source}-${index}`} className={selected.has(index) && !valid(row) ? "is-invalid" : ""}>
               <td><input type="checkbox" aria-label={`Importer ${row.source}`} checked={selected.has(index)} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; })} /></td>
-              <td>{row.source}{Boolean(row.rawLabel || Object.keys(row.unknownFields ?? {}).length) && <details className="transfer-row-notes"><summary>Données du fichier</summary>{row.rawLabel && <p>Libellé : {row.rawLabel}</p>}{Object.entries(row.unknownFields ?? {}).map(([name, value]) => <p key={name}>{name} : {value}</p>)}</details>}{Boolean(row.warnings?.length) && <details className="transfer-row-notes"><summary>À vérifier</summary>{row.warnings!.map((warning, note) => <p key={note}>{warning}</p>)}</details>}</td>{fields.map((field) => <td key={field.key}><input aria-label={`${field.label}, ${row.source}`} aria-invalid={Boolean(errors[field.key])} aria-describedby={errors[field.key] ? `import-error-${index}-${field.key}` : undefined} type={field.key === "movementDate" ? "date" : "text"} placeholder={field.key === "vintage" ? "Année / 0000" : undefined} style={{ width: field.width }} value={row[field.key]} onChange={(event) => updateRow(index, field.key, event.target.value)} />{errors[field.key] && <small id={`import-error-${index}-${field.key}`} className="transfer-field-error">{errors[field.key]}</small>}</td>)}
+              <td>{row.source}{Boolean(row.rawLabel || Object.keys(row.unknownFields ?? {}).length) && <details className="transfer-row-notes"><summary>Données du fichier</summary>{row.rawLabel && <p>Libellé : {row.rawLabel}</p>}{Object.entries(row.unknownFields ?? {}).map(([name, value]) => <p key={name}>{name} : {value}</p>)}</details>}{Boolean(row.warnings?.length) && <details className="transfer-row-notes"><summary>À vérifier</summary>{row.warnings!.map((warning, note) => <p key={note}>{warning}</p>)}</details>}<IdentificationNotes row={row} /></td>{fields.map((field) => <td key={field.key}><input aria-label={`${field.label}, ${row.source}`} aria-invalid={Boolean(errors[field.key])} aria-describedby={errors[field.key] ? `import-error-${index}-${field.key}` : undefined} type={field.key === "movementDate" ? "date" : "text"} placeholder={field.key === "vintage" ? "Année / 0000" : undefined} style={{ width: field.width }} value={row[field.key]} onChange={(event) => updateRow(index, field.key, event.target.value)} />{errors[field.key] && <small id={`import-error-${index}-${field.key}`} className="transfer-field-error">{errors[field.key]}</small>}</td>)}
             </tr>; })}</tbody></table></div>
           <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={importRows} disabled={!activeJobId || !picked.length || Boolean(invalid) || busy || usage?.remaining === 0}><Check size={17} /> {busy ? "Import en cours…" : `Confirmer ${picked.length} vin${picked.length > 1 ? "s" : ""}`}</button></div></>}
       </> : <div className="transfer-actions"><button type="button" className="cellar-pill cellar-pill--save" onClick={exportData} disabled={busy || usage?.remaining === 0}><Download size={17} /> {busy ? "Préparation…" : "Télécharger le fichier Excel"}</button></div>}
