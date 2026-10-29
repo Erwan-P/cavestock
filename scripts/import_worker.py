@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
 ROOT = Path(__file__).resolve().parent.parent
-LOCAL_KEYS = {"CAVESTOCK_URL", "IMPORT_WORKER_TOKEN", "CHATGPT_MODEL", "CHATGPT_WEB_MAX_REFERENCES"}
+LOCAL_KEYS = {"CAVESTOCK_URL", "IMPORT_WORKER_TOKEN", "CHATGPT_MODEL"}
 OPENAI_API = "https://api.openai.com/v1"
 AUTH_BASE = "https://auth.openai.com"
 RESOURCE = OPENAI_API
@@ -472,7 +472,13 @@ IMPORT_INSTRUCTIONS = (
     "les couleurs explicites ; dans un onglet mixte, suis les sections. Préserve les noms combinés dans rawLabel. "
     "Les repères de stock décroissants (24,23,...,0) sont une grille de suivi, pas une quantité à importer. "
     "Lis le compteur adjacent lorsqu'il est présent ; les couleurs de remplissage seules peuvent être ambiguës. "
-    "Lis les dates depuis formatted sans inventer le jour d'une date partielle : garde alors le texte en commentaire. "
+    "Date d'achat : renseigne movementDate au format YYYY-MM-DD dès qu'une date complète est disponible, "
+    "même dans une note ou un commentaire. dateValues contient les dates Excel complètes sous-jacentes : "
+    "utilise cette valeur en priorité même si formatted n'affiche que le mois et l'année. Les en-têtes et le "
+    "contexte déterminent le sens de la date : ne confonds pas achat, millésime et date de dégustation. "
+    "Une date d'achat transférée dans movementDate n'a pas à être répétée dans comment ; préserve les autres notes. "
+    "Pour une date purement textuelle partielle sans dateValues, n'invente pas le jour : conserve le texte "
+    "en commentaire avec un avertissement et laisse movementDate vide. "
     "Millésime : année explicite ou 0000 seulement si inconnu explicite, sinon vide. Quantité zéro explicite : "
     "conserver la ligne. Prix par bouteille : seulement si explicite et non ambigu, décimales avec point. "
     "Ne transforme pas les nombres des grilles en commentaires ou colonnes inconnues. Conserve les autres "
@@ -679,19 +685,13 @@ def chatgpt_response(access_token: str, model: str, file_name: str, file_bytes: 
     analysis["warnings"].extend(review_categories(access_token, model, analysis["rows"], heartbeat))
     analysis["warnings"].extend(review_regions(access_token, model, analysis["rows"], sheets, heartbeat))
     from import_identity import review_identities
-    try:
-        web_limit = int(os.environ.get("CHATGPT_WEB_MAX_REFERENCES", "100"))
-    except ValueError as error:
-        raise ValueError("CHATGPT_WEB_MAX_REFERENCES doit être un entier entre 0 et 500.") from error
-    if not 0 <= web_limit <= 500:
-        raise ValueError("CHATGPT_WEB_MAX_REFERENCES doit être compris entre 0 et 500.")
     def ask(instructions, message, *, web_search=False):
         if heartbeat:
             heartbeat()
         return response_json(access_token, model, instructions, message, heartbeat, web_search=web_search)
     enriched = copy.deepcopy(analysis["rows"])
     try:
-        analysis["warnings"].extend(review_identities(enriched, ask, web_limit=web_limit,
+        analysis["warnings"].extend(review_identities(enriched, ask,
             log=lambda message: print(message, file=sys.stderr, flush=True)))
         candidate = {"rows": enriched, "warnings": analysis["warnings"]}
         validate_analysis(candidate)

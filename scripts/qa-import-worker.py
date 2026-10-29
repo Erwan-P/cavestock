@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -107,6 +108,22 @@ transport = worker.read_workbook("fixture.csv", "Nom;Quantité\nVin de test;2\n"
 assert len(transport["sheets"][0]["rows"]) == 2
 assert transport["sheets"][0]["rows"][1]["cells"]["A"] == "Vin de test"
 
+# Excel's displayed month/year must not hide its stored day; text stays partial.
+for date1904 in (False, True):
+    fixture = subprocess.run(["node", "--input-type=module", "-e", '''
+import XLSX from 'xlsx';
+const sheet = XLSX.utils.aoa_to_sheet([['Date achat', 'Note'], [45000, 'Sep-16'], [60, 'partial']]);
+sheet.A2.z = 'mmm-yy'; sheet.A3.z = 'mmm-yy';
+const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, 'Dates');
+book.Workbook = {WBProps: {date1904: process.argv[1] === 'true'}};
+process.stdout.write(XLSX.write(book, {type:'buffer', bookType:'xlsx'}));
+''', str(date1904).lower()], capture_output=True, check=True).stdout
+    dates = worker.read_workbook("dates.xlsx", fixture)["sheets"][0]["rows"]
+    assert dates[1]["dateValues"]["A"] == ("2027-03-16" if date1904 else "2023-03-15")
+    assert "B" not in dates[1]["dateValues"]
+    if not date1904:
+        assert "dateValues" not in dates[2], "Excel's fictitious 1900-02-29 must be rejected."
+
 # Hosted search runs outside JSON mode, retaining only URLs observed in tool events.
 events = [
     {"type": "response.output_item.done", "item": {"type": "web_search_call", "action": {"sources": [
@@ -138,7 +155,7 @@ def ask_identity(instructions, message, **kwargs):
     calls.append(kwargs)
     assert all(secret not in message for secret in ["PRIVATE-COMMENT", "19.90", "2026-01-01", "Autre ligne"])
     return copy.deepcopy(next(answers))
-assert review_identities(rows, ask_identity, web_limit=1, log=lambda _: None) == []
+assert review_identities(rows, ask_identity, log=lambda _: None) == []
 assert len(calls) == 3 and calls[1]["web_search"] is True, "Duplicate identities must share one research request."
 assert all(row["classification"]["status"] == "web" for row in rows)
 assert all(before[i][key] == result[key] for i, result in enumerate(rows) for key in protected)
@@ -159,10 +176,20 @@ try:
     raise AssertionError("A fabricated citation was accepted")
 except ValueError:
     assert unchanged["appellation"] == identity_row["appellation"]
-answers = iter([proposal])
-limited = [copy.deepcopy(identity_row)]
-assert review_identities(limited, lambda *a, **k: copy.deepcopy(next(answers)), web_limit=0, log=lambda _: None)
-assert limited[0]["classification"]["status"] == "uncertain" and limited[0]["appellation"] == ""
+# No application search cap: every pending unique reference is researched.
+many = [dict(identity_row, rawLabel=f"Wine {i}") for i in range(101)]
+web_calls = []
+def unlimited_ask(instructions, message, **kwargs):
+    data = json.loads(message)
+    if kwargs.get("web_search"):
+        web_calls.append(data)
+        return copy.deepcopy(evidence)
+    if isinstance(data, list):
+        return {"identities": [{"id": item["id"], "changes": {}, "needs_web": True, "reason": "Check"} for item in data]}
+    return copy.deepcopy(confirmed)
+assert review_identities(many, unlimited_ask, log=lambda _: None) == []
+assert len(web_calls) == 101
+
 for malformed in [{"rows": [], "warnings": []}, {"rows": [row] * 501, "warnings": []}, {"rows": [dict(row, quantity=2)], "warnings": []}, {"rows": [dict(row, unknownFields={"bad": 1})], "warnings": []}]:
     try:
         worker.validate_analysis(malformed)

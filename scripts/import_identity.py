@@ -42,7 +42,7 @@ def apply_identity(row, changes, origin, reason, sources=()):
     row["classification"] = classification(origin, reason, changes=records, sources=list(sources)[:3])
 
 
-def review_identities(rows, ask, *, web_limit=20, log=print):
+def review_identities(rows, ask, *, log=print):
     """Review all unique references, then research only uncertain/conflicting identities."""
     groups = {}
     for row in rows:
@@ -92,9 +92,9 @@ def review_identities(rows, ask, *, web_limit=20, log=print):
 
     unavailable = False
     for index, (group, reason) in enumerate(pending):
-        if index >= web_limit or unavailable:
+        if unavailable:
             continue
-        log(f"Recherche web : référence {index + 1} / {min(len(pending), web_limit)}")
+        log(f"Recherche web : référence {index + 1} / {len(pending)}")
         evidence = public_identity(group[0])
         search_prompt = (
             "Recherche l'identité exacte de ce vin sur Internet. Privilégie le site du producteur, les organismes "
@@ -144,8 +144,6 @@ def review_identities(rows, ask, *, web_limit=20, log=print):
                 apply_identity(row, changes, "web", answer["reason"], sources)
             else:
                 row["classification"] = classification("uncertain", answer["reason"], sources=sources)
-    if len(pending) > web_limit:
-        warnings.append(f"{len(pending) - web_limit} référence(s) restent à vérifier : limite de {web_limit} références recherchées sur le web pour cet import.")
     # Duplicate references share evidence, never stocks or other per-row values.
     for _, group in references:
         for row in group:

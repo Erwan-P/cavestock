@@ -39,7 +39,7 @@ const sheets = workbook.SheetNames.map(name => {
   const fillStyles = [];
   const fillIds = new Map();
   for (let r = range.s.r; r <= range.e.r; r++) {
-    const cells = {}, formatted = {}, fills = {};
+    const cells = {}, formatted = {}, fills = {}, dateValues = {};
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = sheet[XLSX.utils.encode_cell({ r, c })];
       if (!cell || cell.v === undefined || cell.v === null || cell.v === "") continue;
@@ -47,6 +47,13 @@ const sheets = workbook.SheetNames.map(name => {
       cells[col] = cell.t === "e" ? { error: String(cell.w ?? cell.v) } : cell.v;
       const text = XLSX.utils.format_cell(cell);
       if (typeof cell.v === "number" && text !== String(cell.v)) formatted[col] = text;
+      if (typeof cell.v === "number" && cell.z && XLSX.SSF.is_date(cell.z)) {
+        const date = XLSX.SSF.parse_date_code(cell.v, { date1904: Boolean(workbook.Workbook?.WBProps?.date1904) });
+        if (date && date.y >= 1900 && date.y <= 9999 && date.m >= 1 && date.m <= 12 && date.d >= 1
+          && date.d <= new Date(Date.UTC(date.y, date.m, 0)).getUTCDate()) {
+          dateValues[col] = `${date.y}-${String(date.m).padStart(2, "0")}-${String(date.d).padStart(2, "0")}`;
+        }
+      }
       if (cell.s?.patternType && cell.s.patternType !== "none") {
         const key = JSON.stringify(cell.s);
         if (!fillIds.has(key)) { fillIds.set(key, fillStyles.length); fillStyles.push(cell.s); }
@@ -54,7 +61,8 @@ const sheets = workbook.SheetNames.map(name => {
       }
     }
     if (Object.keys(cells).length) rows.push({ source: `${name} · ligne ${r + 1}`, cells,
-      ...(Object.keys(formatted).length ? { formatted } : {}), ...(Object.keys(fills).length ? { fills } : {}) });
+      ...(Object.keys(formatted).length ? { formatted } : {}), ...(Object.keys(dateValues).length ? { dateValues } : {}),
+      ...(Object.keys(fills).length ? { fills } : {}) });
   }
   return { name, range: sheet["!fullref"] ?? sheet["!ref"] ?? "A1", fillStyles, rows };
 });
