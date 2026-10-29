@@ -83,6 +83,26 @@ with patch.object(worker, "response_json", return_value={"regions": {
     worker.review_regions("synthetic", "gpt-6-luna", [region_row], [sheet])
     assert region_row["region"] == "RHONE"
     assert region_row["warnings"] == ["Millésime absent"]
+# A partial region response must retry only omissions and preserve accepted rows.
+region_rows = [dict(row, source="Feuil1 · ligne 1"), dict(row, source="Feuil1 · ligne 2")]
+with patch.object(worker, "response_json", side_effect=[
+    {"regions": {region_rows[0]["source"]: {"value": "RHONE", "warnings": []},
+                 "source inventée": {"value": "FAUX", "warnings": []}}},
+    {"regions": {region_rows[1]["source"]: {"value": "BORDEAUX", "warnings": []}}},
+]) as model:
+    assert worker.review_regions("synthetic", "gpt-6-luna", region_rows, [sheet]) == []
+    retried = json.loads(model.call_args_list[1].args[3])["wines"]
+    assert [item["source"] for item in retried] == [region_rows[1]["source"]]
+    assert [item["region"] for item in region_rows] == ["RHONE", "BORDEAUX"]
+for invalid in [{"regions": {}}, {"regions": {row["source"]: {"value": "RHONE", "warnings": "invalid"}}}]:
+    untouched = copy.deepcopy(row)
+    with patch.object(worker, "response_json", return_value=invalid) as model:
+        assert worker.review_regions("synthetic", "gpt-6-luna", [untouched], [sheet])
+        assert model.call_count == 2 and untouched == row
+with patch.object(worker, "response_json", side_effect=RuntimeError("temporarily unavailable")):
+    untouched = copy.deepcopy(row)
+    assert worker.review_categories("synthetic", "gpt-6-luna", [untouched])
+    assert untouched == row
 transport = worker.read_workbook("fixture.csv", "Nom;Quantité\nVin de test;2\n".encode())
 assert len(transport["sheets"][0]["rows"]) == 2
 assert transport["sheets"][0]["rows"][1]["cells"]["A"] == "Vin de test"
