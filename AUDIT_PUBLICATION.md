@@ -1,5 +1,18 @@
 # Audit avant publication du dépôt
 
+## Actualisation du 30 octobre 2026
+
+Le contrôle du verrou npm a signalé de nouveaux avis de sécurité pour Next.js
+et Zod. Next.js a été mis à jour de `16.3.8` vers `16.4.3`, et Zod de
+`4.6.5` vers `4.6.7`. Après mise à jour, `npm audit --json --ignore-scripts`
+ne signale aucune vulnérabilité connue pour ce verrou. Les résultats datés
+du 16 octobre ci-dessous décrivent l'audit initial.
+
+Les réglages des previews Vercel restent à contrôler dans le tableau de bord.
+Un dépôt public autorise la lecture et les forks ; il ne donne aucun droit
+d'écriture aux visiteurs. Une pull request externe reste une proposition à
+examiner avant fusion ou approbation de son déploiement.
+
 Audit réalisé le 16 octobre 2026, à partir du commit `07c9e0d` et des
 correctifs livrés avec ce document. Le changement de visibilité du dépôt
 n'a pas été effectué pendant cet audit.
