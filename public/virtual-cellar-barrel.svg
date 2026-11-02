@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="250" viewBox="0 0 320 250" fill="none">
+<defs>
+ <linearGradient id="oak" x1="84" y1="120" x2="239" y2="120" gradientUnits="userSpaceOnUse"><stop stop-color="#4c2f1b"/><stop offset=".25" stop-color="#ad7945"/><stop offset=".5" stop-color="#c08d52"/><stop offset=".75" stop-color="#996334"/><stop offset="1" stop-color="#4a2c19"/></linearGradient>
+ <linearGradient id="lid" x1="130" y1="29" x2="178" y2="92" gradientUnits="userSpaceOnUse"><stop stop-color="#b48b57"/><stop offset="1" stop-color="#704626"/></linearGradient>
+ <linearGradient id="metal" x1="83" y1="0" x2="242" y2="0" gradientUnits="userSpaceOnUse"><stop stop-color="#3b3930"/><stop offset=".3" stop-color="#b4a88b"/><stop offset=".6" stop-color="#8f876e"/><stop offset="1" stop-color="#3c3a31"/></linearGradient>
+ <clipPath id="body"><path d="M99 62C76 101 73 167 96 207C117 233 204 233 225 207C248 167 245 101 222 62Z"/></clipPath>
+ <clipPath id="top"><ellipse cx="160.5" cy="62" rx="58" ry="24"/></clipPath>
+ <filter id="shadow" x="-50%" y="-30%" width="200%" height="190%"><feDropShadow dx="6" dy="12" stdDeviation="9" flood-opacity=".55"/></filter>
+</defs>
+<g transform="rotate(12 160 133)" filter="url(#shadow)">
+ <path d="M99 62C76 101 73 167 96 207C117 233 204 233 225 207C248 167 245 101 222 62Z" fill="url(#oak)" stroke="#4d311f" stroke-width="2"/>
+ <g clip-path="url(#body)" stroke="#57351e" stroke-width="1.6" stroke-opacity=".65">
+  <path d="M109 64C93 116 91 166 106 218M127 74C116 120 115 175 124 225M148 81C144 130 143 179 147 229M171 81C175 130 176 179 172 229M193 75C206 125 207 177 195 225M211 66C229 117 231 169 215 218"/>
+  <path d="M107 105Q98 139 103 174M129 107Q124 147 129 189M155 102Q152 139 155 160M182 125Q189 152 184 192M211 110Q221 145 217 177" stroke="#e3b577" stroke-width="1" stroke-opacity=".3"/>
+  <path d="M84 102Q160 135 238 102L240 113Q160 146 82 113Z" fill="url(#metal)" stroke="#38362d" stroke-width="1"/>
+  <path d="M81 170Q160 203 241 170L239 181Q160 214 83 181Z" fill="url(#metal)" stroke="#38362d" stroke-width="1"/>
+  <path d="M94 203Q160 231 227 203L224 211Q160 240 97 211Z" fill="url(#metal)" stroke="#38362d" stroke-width="1"/>
+ </g>
+ <!-- The lid and rim share the same ellipse centre and edge as the barrel shoulders. -->
+ <path d="M99 62A61.5 28 0 0 0 222 62L224 70A63.5 28 0 0 1 97 70Z" fill="url(#metal)" stroke="#444035"/>
+ <ellipse cx="160.5" cy="62" rx="61.5" ry="28" fill="#442c1c" stroke="#c29a61" stroke-width="2"/>
+ <ellipse cx="160.5" cy="62" rx="58" ry="24" fill="url(#lid)"/>
+ <g clip-path="url(#top)" stroke="#56351e" stroke-width="1.4"><path d="M104 45H217M101 55H220M101 65H220M104 75H217"/><path d="M119 50H160M155 60H202M128 70H180" stroke="#d0a971" stroke-opacity=".35" stroke-width=".8"/></g>
+ <ellipse cx="160.5" cy="62" rx="58" ry="24" stroke="#291b12" stroke-width="2"/>
+ <path d="M101 61A59.5 26 0 0 1 220 61" stroke="#e0b982" stroke-opacity=".5" stroke-width="1.2"/>
+</g>
+</svg>

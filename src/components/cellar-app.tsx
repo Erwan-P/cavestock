@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, FileClock, House, LogOut, Mail, Minus, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, UserRound, Wine, X } from "lucide-react";
 import { GlobalHistory } from "@/components/global-history";
 import { ContactModal } from "@/components/contact-modal";
@@ -11,6 +12,8 @@ import { TransferModal } from "@/components/transfer-modal";
 import type { CellarCategory, CellarData, CellarWine } from "@/lib/cellar-types";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 import { formatVintage } from "@/lib/wine-vintage";
+
+const VirtualCellar = dynamic(() => import("@/components/virtual-cellar"), { ssr: false });
 
 type WineDraft = {
   categoryId: string; region: string; appellation: string; domaine: string; vintage: number;
@@ -61,6 +64,7 @@ function categoryWineName(category: CellarCategory) {
 
 export function CellarApp({ firstName, lastName, email, initialData, view = "cellar" }: { firstName: string; lastName: string; email: string; initialData: CellarData; view?: "cellar" | "history" }) {
   const [data, setData] = useState(initialData);
+  const [virtualCellarOpen, setVirtualCellarOpen] = useState(false);
   const [profileName, setProfileName] = useState({ firstName, lastName });
   const [query, setQuery] = useState("");
   const [sorts, setSorts] = useState<Record<string, Sort>>({});
@@ -202,7 +206,7 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
 
     <main className="cellar-main">
       {view === "history" ? <GlobalHistory data={data} query={query} onClear={() => setQuery("")} /> : <>
-      {!normalizedQuery && <section className="cellar-stats" aria-labelledby="stats-title">
+      {!normalizedQuery && <div className="cellar-overview"><section className="cellar-stats" aria-labelledby="stats-title">
         <h1 id="stats-title">Statistiques</h1><p className="cellar-stats__period">Entrées et sorties du 1er janvier au 31 décembre {data.stats.year}</p>
         <div className="cellar-stats__grid">
           <div><Wine aria-hidden="true" /><h2>Total de bouteilles</h2><strong>{data.stats.totalBottles.toLocaleString("fr-FR")}</strong></div>
@@ -210,7 +214,10 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
           <div><ArrowUpRight aria-hidden="true" /><h2>Stock sortant</h2><strong>{data.stats.stockOut.toLocaleString("fr-FR")}</strong></div>
           <div><CalendarDays aria-hidden="true" /><h2>Plus ancienne bouteille</h2><strong>{data.stats.oldestVintage ?? "-"}</strong></div>
         </div>
-      </section>}
+      </section><button type="button" className="cellar-virtual-entry" onClick={() => setVirtualCellarOpen(true)} aria-haspopup="dialog">
+        <span className="cellar-virtual-entry__art" aria-hidden="true" />
+        <strong>Ma cave virtuelle</strong><span className="cellar-virtual-entry__link">Entrer dans ma cave <ArrowUpRight size={18} /></span>
+      </button></div>}
 
       {groups.length ? groups.map(({ category, wines }) => <section className="cellar-category" key={category.id} aria-label={category.name}>
         <div className="cellar-category__head">
@@ -234,6 +241,7 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
       </>}
     </main>
     <SiteFooter />
+    {virtualCellarOpen && <VirtualCellar data={data} onClose={() => setVirtualCellarOpen(false)} />}
 
     {(featureModal === "import" || featureModal === "export") && <TransferModal mode={featureModal} onClose={() => setFeatureModal(null)} onImported={(nextData) => { setData(nextData); setFeatureModal(null); }} />}
     {featureModal === "profile" && <ProfileModal firstName={profileName.firstName} lastName={profileName.lastName} email={email} onClose={() => setFeatureModal(null)} onUpdated={(nextFirst, nextLast) => setProfileName({ firstName: nextFirst, lastName: nextLast })} />}
