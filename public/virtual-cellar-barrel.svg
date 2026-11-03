@@ -16,6 +16,7 @@
   <path d="M81 170Q160 203 241 170L239 181Q160 214 83 181Z" fill="url(#metal)" stroke="#38362d" stroke-width="1"/>
   <path d="M94 203Q160 231 227 203L224 211Q160 240 97 211Z" fill="url(#metal)" stroke="#38362d" stroke-width="1"/>
  </g>
+ <g transform="translate(0 62) scale(1 .65) translate(0 -62)">
  <!-- The lid and rim share the same ellipse centre and edge as the barrel shoulders. -->
  <path d="M99 62A61.5 28 0 0 0 222 62L224 70A63.5 28 0 0 1 97 70Z" fill="url(#metal)" stroke="#444035"/>
  <ellipse cx="160.5" cy="62" rx="61.5" ry="28" fill="#442c1c" stroke="#c29a61" stroke-width="2"/>
@@ -23,5 +24,6 @@
  <g clip-path="url(#top)" stroke="#56351e" stroke-width="1.4"><path d="M104 45H217M101 55H220M101 65H220M104 75H217"/><path d="M119 50H160M155 60H202M128 70H180" stroke="#d0a971" stroke-opacity=".35" stroke-width=".8"/></g>
  <ellipse cx="160.5" cy="62" rx="58" ry="24" stroke="#291b12" stroke-width="2"/>
  <path d="M101 61A59.5 26 0 0 1 220 61" stroke="#e0b982" stroke-opacity=".5" stroke-width="1.2"/>
+</g>
 </g>
 </svg>
