@@ -64,7 +64,6 @@ export async function ensureDefaultCategories(userId: string) {
 }
 
 export async function getCellarData(userId: string): Promise<CellarData> {
-  await ensureDefaultCategories(userId);
   const year = currentCalendarYear();
   // Le 1er janvier est toujours en heure d'hiver en France (UTC+1).
   const start = new Date(Date.UTC(year, 0, 1) - 3_600_000);

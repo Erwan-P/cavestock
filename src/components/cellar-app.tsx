@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, FileClock, House, LogOut, Mail, Minus, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, UserRound, Wine, X } from "lucide-react";
+import { WineContextMenu } from "@/components/wine-context-menu";
+import { CategoryManager } from "@/components/category-manager";
+import { CellarRecommendations } from "@/components/cellar-recommendations";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, FileClock, House, LogOut, Mail, Minus, Plus, Search, SlidersHorizontal, Trash2, Upload, UserRound, Wine, X } from "lucide-react";
 import { GlobalHistory } from "@/components/global-history";
 import { ContactModal } from "@/components/contact-modal";
 import { ProfileModal } from "@/components/profile-modal";
@@ -64,6 +67,20 @@ function categoryWineName(category: CellarCategory) {
 
 export function CellarApp({ firstName, lastName, email, initialData, view = "cellar" }: { firstName: string; lastName: string; email: string; initialData: CellarData; view?: "cellar" | "history" }) {
   const [data, setData] = useState(initialData);
+  const [categoriesOpen,setCategoriesOpen]=useState(false);
+  const [wineTarget, setWineTarget] = useState<{id:string} | null>(null);
+  const wineRows = useRef(new Map<string, HTMLDivElement>());
+  const [wineMenu, setWineMenu] = useState<{wineId:string;x:number;y:number} | null>(null);
+  useEffect(() => {
+    if (!wineTarget) return;
+    const frame = requestAnimationFrame(() => {
+      const row = wineRows.current.get(wineTarget.id);
+      row?.focus({ preventScroll: true });
+      row?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    });
+    const timeout = window.setTimeout(() => setWineTarget(null), 15_000);
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(timeout); };
+  }, [wineTarget]);
   const [virtualCellarOpen, setVirtualCellarOpen] = useState(false);
   const [profileName, setProfileName] = useState({ firstName, lastName });
   const [query, setQuery] = useState("");
@@ -141,6 +158,7 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
     setModal({ type: "add", categoryId }); setHeaderHidden(false);
   }
   function openEdit(wine: CellarWine) {
+    setWineMenu(null);
     setMenuOpen(false); setSortOpen(null); setDraft(draftFromWine(wine)); setError("");
     setConfirmDelete(false); setModal({ type: "edit", wineId: wine.id }); setHeaderHidden(false);
   }
@@ -214,10 +232,9 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
           <div><ArrowUpRight aria-hidden="true" /><h2>Stock sortant</h2><strong>{data.stats.stockOut.toLocaleString("fr-FR")}</strong></div>
           <div><CalendarDays aria-hidden="true" /><h2>Plus ancienne bouteille</h2><strong>{data.stats.oldestVintage ?? "-"}</strong></div>
         </div>
-      </section><button type="button" className="cellar-virtual-entry" onClick={() => setVirtualCellarOpen(true)} aria-haspopup="dialog">
-        <span className="cellar-virtual-entry__art" aria-hidden="true" />
+      </section><section className="cellar-discovery" aria-label="Explorer ma cave"><span className="cellar-discovery__art" aria-hidden="true"/><CellarRecommendations data={data} onSelectWine={(id) => { setQuery(""); setWineTarget({id}); }}/><button type="button" className="cellar-virtual-entry" onClick={() => setVirtualCellarOpen(true)} aria-haspopup="dialog">
         <strong>Ma cave virtuelle</strong><span className="cellar-virtual-entry__link">Entrer dans ma cave <ArrowUpRight size={18} /></span>
-      </button></div>}
+      </button></section></div>}
 
       {groups.length ? groups.map(({ category, wines }) => <section className="cellar-category" key={category.id} aria-label={category.name}>
         <div className="cellar-category__head">
@@ -231,16 +248,18 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
               <button type="button" className="cellar-sort-apply" onClick={() => { setSorts((current) => ({ ...current, [category.id]: sortDraft })); setSortOpen(null); }}>Appliquer</button></div>}</div> : <span />}
           <h2>{category.name}</h2><button type="button" className="cellar-pill cellar-pill--add" onClick={() => openAdd(category.id)}><Plus size={20} /> Ajouter</button>
         </div>
-        {wines.length ? <div className="cellar-rows">{wines.map((wine) => <div className="cellar-row" key={wine.id}>
+        {wines.length ? <div className="cellar-rows">{wines.map((wine) => <div className={`cellar-row${wineTarget?.id === wine.id ? " is-targeted" : ""}`} key={wine.id} tabIndex={0} aria-haspopup="menu" onContextMenu={(event) => { event.preventDefault(); setWineMenu({wineId:wine.id,x:event.clientX,y:event.clientY}); }} onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); const bounds=event.currentTarget.getBoundingClientRect(); setWineMenu({wineId:wine.id,x:bounds.left+20,y:bounds.top+20}); } }} ref={(element) => { if (element) wineRows.current.set(wine.id, element); else wineRows.current.delete(wine.id); }}>
           <div className="cellar-row__text"><span>{wine.region}</span><i aria-hidden="true">|</i><span>{wine.appellation}</span><i aria-hidden="true">|</i><span>{wine.domaine}</span><i aria-hidden="true">|</i><span>{formatVintage(wine.vintage)}</span><i aria-hidden="true">|</i><strong>{wine.quantity} {wine.quantity > 1 ? "bouteilles" : "bouteille"}</strong>
             {wine.cuvee && <><i aria-hidden="true">|</i><span>{wine.cuvee}</span></>}{wine.purchasePrice && <><i aria-hidden="true">|</i><span>{Number(wine.purchasePrice).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}</span></>}{wine.comment && <><i aria-hidden="true">|</i><span>{wine.comment}</span></>}</div>
-          <button type="button" className="cellar-edit" aria-label={`Modifier ${wine.domaine}, ${wine.appellation} ${formatVintage(wine.vintage)}`} onClick={() => openEdit(wine)}><Pencil size={18} /></button>
         </div>)}</div> : <p className="cellar-category__empty">Aucun vin dans cette catégorie pour le moment.</p>}
-      </section>) : <div className="cellar-no-results"><Search size={25} /><p>Aucun vin ne correspond à « {query} ».</p><button type="button" onClick={() => setQuery("")}>Effacer la recherche</button></div>}
-      {!normalizedQuery && <button type="button" className="cellar-add-category" onClick={() => { setError(""); setCategoryName(""); setModal({ type: "category" }); setHeaderHidden(false); }}><Plus size={20} /> Ajouter une catégorie</button>}
+      </section>) : <div className="cellar-no-results"><Search size={25} /><p>{normalizedQuery ? `Aucun vin ne correspond à « ${query} ».` : "Votre cave ne contient aucune catégorie."}</p>{normalizedQuery&&<button type="button" onClick={() => setQuery("")}>Effacer la recherche</button>}</div>}
+      {!normalizedQuery && <div className="category-actions"><button type="button" className="cellar-add-category" onClick={() => { setError(""); setCategoryName(""); setModal({ type: "category" }); setHeaderHidden(false); }}><Plus size={20} /> Ajouter une catégorie</button><button type="button" className="cellar-add-category cellar-manage-categories" onClick={()=>setCategoriesOpen(true)}>Gérer les catégories</button></div>}
       </>}
     </main>
     <SiteFooter />
+    {wineMenu && <WineContextMenu x={wineMenu.x} y={wineMenu.y} onClose={() => setWineMenu(null)} onRestoreFocus={() => wineRows.current.get(wineMenu.wineId)?.focus({preventScroll:true})} onEdit={() => { const wine=data.wines.find((item) => item.id===wineMenu.wineId); wineRows.current.get(wineMenu.wineId)?.focus({preventScroll:true}); setWineMenu(null); if(wine) openEdit(wine); }} />}
+
+    {categoriesOpen&&<CategoryManager data={data} onUpdated={setData} onClose={()=>setCategoriesOpen(false)}/>}
     {virtualCellarOpen && <VirtualCellar data={data} onClose={() => setVirtualCellarOpen(false)} />}
 
     {(featureModal === "import" || featureModal === "export") && <TransferModal mode={featureModal} onClose={() => setFeatureModal(null)} onImported={(nextData) => { setData(nextData); setFeatureModal(null); }} />}

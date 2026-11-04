@@ -9,7 +9,7 @@ const createdUsers = [];
 
 async function fixtureUser(name) {
   const user = await prisma.user.create({
-    data: { firstName: name, lastName: "Test", email: `${randomUUID()}@example.invalid`, passwordHash: "temporary-test-user", verifiedAt: new Date() },
+    data: { firstName: name, lastName: "Test", email: `${randomUUID()}@example.invalid`, passwordHash: "temporary-test-user", verifiedAt: new Date(), categories: { create: ["Vins Blanc", "Vins Rouge", "Vins Rosé", "Champagnes"].map((name,position)=>({name,normalizedName:name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase(),position})) } },
   });
   createdUsers.push(user.id);
   const sid = randomUUID();

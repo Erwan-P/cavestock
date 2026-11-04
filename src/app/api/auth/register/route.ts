@@ -1,3 +1,4 @@
+import { DEFAULT_CATEGORIES, normalize } from "@/lib/cellar";
 import { timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { hash } from "bcryptjs";
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         });
         if (consumed.count !== 1) throw new Error("CAPTCHA déjà utilisé ou expiré.");
         return tx.user.create({
-          data: { firstName, lastName, email, passwordHash,
+          data: { firstName, lastName, email, passwordHash, categories: { create: DEFAULT_CATEGORIES.map((name, position) => ({ name, normalizedName: normalize(name), position })) },
             emailVerification: { create: { email, tokenHash: verification.tokenHash, expiresAt: verification.expiresAt } } },
           select: { id: true },
         });
