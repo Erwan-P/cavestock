@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { WineContextMenu } from "@/components/wine-context-menu";
 import { CategoryManager } from "@/components/category-manager";
 import { CellarRecommendations } from "@/components/cellar-recommendations";
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, FileClock, House, LogOut, Mail, Minus, Plus, Search, SlidersHorizontal, Trash2, Upload, UserRound, Wine, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, FileClock, House, LogOut, Mail, Minus, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload, UserRound, Wine, X } from "lucide-react";
 import { GlobalHistory } from "@/components/global-history";
 import { ContactModal } from "@/components/contact-modal";
 import { ProfileModal } from "@/components/profile-modal";
@@ -22,7 +22,7 @@ type WineDraft = {
   categoryId: string; region: string; appellation: string; domaine: string; vintage: number;
   quantity: number; cuvee: string; purchasePrice: string; movementDate: string; comment: string;
 };
-type Modal = { type: "add"; categoryId: string } | { type: "edit"; wineId: string } | { type: "category" } | null;
+type Modal = { type: "add"; categoryId: string } | { type: "edit"; wineId: string } | null;
 type SortField = "region" | "appellation" | "domaine" | "vintage" | "quantity" | "cuvee" | "purchasePrice";
 type Sort = { field: SortField; direction: "asc" | "desc" };
 const sortOptions: Array<{ value: SortField; label: string }> = [
@@ -92,7 +92,6 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
   const [modal, setModal] = useState<Modal>(null);
   const [featureModal, setFeatureModal] = useState<"import" | "export" | "profile" | "contact" | null>(null);
   const [draft, setDraft] = useState<WineDraft | null>(null);
-  const [categoryName, setCategoryName] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -148,7 +147,7 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
       sorts[category.id] ?? { field: "region", direction: "asc" }),
   })).filter((group) => !normalizedQuery || group.wines.length > 0), [data, normalizedQuery, sorts]);
   function closeModal() {
-    setModal(null); setDraft(null); setCategoryName(""); setConfirmDelete(false); setError("");
+    setModal(null); setDraft(null); setConfirmDelete(false); setError("");
   }
   function openFeature(kind: "import" | "export" | "profile" | "contact") {
     setMenuOpen(false); setSortOpen(null); setFeatureModal(kind); setHeaderHidden(false);
@@ -179,14 +178,6 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
       await submitAction({ action: modal.type === "edit" ? "update-wine" : "create-wine",
         ...(modal.type === "edit" ? { id: modal.wineId } : {}), wine: { ...draft, purchasePrice: draft.purchasePrice || null, movementDate: draft.movementDate || null } });
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Impossible d'enregistrer ce vin."); }
-    finally { setBusy(false); }
-  }
-  async function saveCategory(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (busy) return;
-    setBusy(true); setError("");
-    try { await submitAction({ action: "create-category", category: { name: categoryName } }); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Impossible d'ajouter la catégorie."); }
     finally { setBusy(false); }
   }
   async function deleteWine() {
@@ -253,7 +244,7 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
             {wine.cuvee && <><i aria-hidden="true">|</i><span>{wine.cuvee}</span></>}{wine.purchasePrice && <><i aria-hidden="true">|</i><span>{Number(wine.purchasePrice).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })}</span></>}{wine.comment && <><i aria-hidden="true">|</i><span>{wine.comment}</span></>}</div>
         </div>)}</div> : <p className="cellar-category__empty">Aucun vin dans cette catégorie pour le moment.</p>}
       </section>) : <div className="cellar-no-results"><Search size={25} /><p>{normalizedQuery ? `Aucun vin ne correspond à « ${query} ».` : "Votre cave ne contient aucune catégorie."}</p>{normalizedQuery&&<button type="button" onClick={() => setQuery("")}>Effacer la recherche</button>}</div>}
-      {!normalizedQuery && <div className="category-actions"><button type="button" className="cellar-add-category" onClick={() => { setError(""); setCategoryName(""); setModal({ type: "category" }); setHeaderHidden(false); }}><Plus size={20} /> Ajouter une catégorie</button><button type="button" className="cellar-add-category cellar-manage-categories" onClick={()=>setCategoriesOpen(true)}>Gérer les catégories</button></div>}
+      {!normalizedQuery && <button type="button" className="cellar-add-category" aria-haspopup="dialog" onClick={() => setCategoriesOpen(true)}><Pencil size={17} aria-hidden="true" /> Gérer les catégories</button>}
       </>}
     </main>
     <SiteFooter />
@@ -266,9 +257,9 @@ export function CellarApp({ firstName, lastName, email, initialData, view = "cel
     {featureModal === "profile" && <ProfileModal firstName={profileName.firstName} lastName={profileName.lastName} email={email} onClose={() => setFeatureModal(null)} onUpdated={(nextFirst, nextLast) => setProfileName({ firstName: nextFirst, lastName: nextLast })} />}
     {featureModal === "contact" && <ContactModal firstName={profileName.firstName} lastName={profileName.lastName} email={email} onClose={() => setFeatureModal(null)} />}
 
-    {modal && <div className="cellar-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) { if (confirmDelete) setConfirmDelete(false); else closeModal(); } }}><div ref={dialogRef} tabIndex={-1} className={`cellar-dialog${modal.type === "category" ? " cellar-dialog--small" : ""}`} role="dialog" aria-modal={!confirmDelete} aria-hidden={confirmDelete} inert={confirmDelete} aria-labelledby="cellar-dialog-title">
+    {modal && <div className="cellar-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) { if (confirmDelete) setConfirmDelete(false); else closeModal(); } }}><div ref={dialogRef} tabIndex={-1} className="cellar-dialog" role="dialog" aria-modal={!confirmDelete} aria-hidden={confirmDelete} inert={confirmDelete} aria-labelledby="cellar-dialog-title">
       <button type="button" className="cellar-dialog__close" aria-label="Fermer" onClick={closeModal} disabled={busy}><X size={28} /></button>
-      {modal.type === "category" ? <><h2 id="cellar-dialog-title">Ajouter une catégorie</h2><form onSubmit={saveCategory} className="cellar-category-form"><label htmlFor="category-name">Nom de la catégorie</label><input id="category-name" autoFocus required minLength={2} maxLength={100} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="Ex. Vins doux" />{error && <p className="cellar-form-error" role="alert">{error}</p>}<button className="cellar-pill cellar-pill--save" disabled={busy} type="submit"><Plus size={18} /> {busy ? "Ajout..." : "Ajouter"}</button></form></> : draft && <>
+      {draft && <>
         <h2 id="cellar-dialog-title">{modal.type === "add" ? `Ajouter ${categoryWineName(data.categories.find((category) => category.id === draft.categoryId) ?? data.categories[0])}` : `Modifier ${activeWine?.domaine ?? "ce vin"}`}</h2>
         <div className="cellar-dialog__content"><form id="cellar-wine-form" className="cellar-wine-form" onSubmit={saveWine}>
           <label><span>Région</span><input autoFocus required maxLength={150} placeholder="Région..." value={draft.region} onChange={(event) => updateDraft("region", event.target.value)} /></label>
