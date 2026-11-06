@@ -16,6 +16,11 @@ globalThis.fetch = async (input, init) => {
   assert.equal(body.store, false);
   assert.equal(body.max_completion_tokens, 1500);
   const reply = (text) => Response.json({ success: true, result: { choices: [{ message: { content: text } }] } });
+  if (query.startsWith('Que manger avec ma bouteille')) {
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0].cuvee, 'Riesling');
+    return reply(JSON.stringify({ mode: 'wine', message: 'QA', items: ['Poisson', 'Choucroute'].map(dish => ({ wineId: candidates[0].id, dish, reason: 'QA' })) }));
+  }
   if (query === 'qa provider quota') return new Response('{}', { status: 429 });
   if (query === 'qa invalid json') return reply('invalid JSON');
   if (query === 'qa invalid schema') return reply(JSON.stringify({ mode: 'invalid', message: '', items: [] }));

@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingMark } from "./loading-mark";
 import { FormEvent, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { ForgotPasswordForm } from "@/components/password-forms";
@@ -63,7 +64,7 @@ export function LoginForm({ onSwitch }: { onSwitch: () => void }) {
         {error && <p className="auth-form__error" role="alert">{error}</p>}
         {resendMessage && <p className="auth-form__success" role="status">{resendMessage}</p>}
         {needsVerification && <button className="auth-form__resend" type="button" disabled={busy} onClick={() => void resend()}>Renvoyer le lien de validation</button>}
-        <button className="button button--primary" type="submit" disabled={busy}>{busy ? "Connexion…" : "Accéder à ma cave"}<ArrowRight size={18} /></button>
+        <button className="button button--primary" type="submit" disabled={busy}>{busy ? "Connexion…" : "Accéder à ma cave"}{busy ? <LoadingMark /> : <ArrowRight size={18} />}</button>
       </form>
       <p className="auth-card__switch">Pas encore de compte ? <button type="button" onClick={onSwitch} disabled={busy}>Créer mon compte</button></p>
     </div>

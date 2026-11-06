@@ -1,5 +1,6 @@
+import { LoginLinkMark } from "./loading-mark";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 export function SiteHeader({ variant = "public", showLogin = true }: { variant?: "public" | "private"; showLogin?: boolean }) {
   return (
@@ -16,7 +17,7 @@ export function SiteHeader({ variant = "public", showLogin = true }: { variant?:
         {(variant === "private" || showLogin) && (
           <div className="site-header__actions">
             {variant === "public" ? (
-              <Link className="public-login" href="/connexion">Connexion <ArrowRight size={18} strokeWidth={1.8} /></Link>
+              <Link className="public-login" href="/connexion">Connexion <LoginLinkMark /></Link>
             ) : (
               <><Link className="header-login" href="/connexion">Se connecter</Link><Link className="button button--small button--light" href="/inscription">Créer mon compte <ArrowUpRight size={16} strokeWidth={1.8} /></Link></>
             )}

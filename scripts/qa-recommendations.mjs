@@ -63,6 +63,16 @@ try {
   assert.equal((await api(await fixture(), 'qa provider quota')).status, 429);
   const stale = await api(await fixture(), 'qa stock changed');
   assert.equal(stale.status, 200); assert.deepEqual(stale.body.items, []);
+  const pairingUser = await fixture(2);
+  const bottle = await p.wine.findFirstOrThrow({ where: { userId: pairingUser.id, domaine: 'QA 0' } });
+  await p.wine.update({ where: { id: bottle.id }, data: { domaine: 'Trimbach', cuvee: 'Riesling' } });
+  const dishes = await api(pairingUser, 'Que manger avec ma bouteille de Riesling Trimbach ?');
+  assert.equal(dishes.status, 200);
+  assert.equal(dishes.body.mode, 'wine');
+  assert.deepEqual(dishes.body.items.map(item => item.wineId), [bottle.id, bottle.id]);
+  const unknown = await api(pairingUser, 'Que cuisiner avec mon Château Imaginaire ?');
+  assert.equal(unknown.body.mode, 'wine');
+  assert.deepEqual(unknown.body.items, []);
   const large = await api(await fixture(125));
   assert.equal(large.status, 200); assert.equal(large.body.partial, true);
   const globalKey = rateKey('recommend-global', 'all');

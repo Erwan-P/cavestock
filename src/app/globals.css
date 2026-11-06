@@ -122,3 +122,27 @@ h1 em, h2 em { font-weight: 400; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 @media (forced-colors: active) { * { scrollbar-color: auto; } }
+.loading-mark {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: loading-spin .75s linear infinite;
+}
+.loading-status, .login-link-mark { display: inline-flex; align-items: center; gap: 10px; }
+.login-link-mark { width: 18px; height: 18px; }
+.page-loading {
+  display: flex;
+  width: max-content;
+  margin: 100px auto;
+  padding: 14px 20px;
+  border-radius: 14px;
+  background: #fffaf7;
+  color: #742967;
+}
+.recommendation-dishes { padding-left: 20px; }
+@keyframes loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loading-mark { animation: none; } }
